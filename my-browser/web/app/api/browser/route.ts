@@ -5,21 +5,11 @@ import { NextResponse } from "next/server";
 const execFileAsync = promisify(execFile);
 
 const CONTAINER_NAME = "my-browser-mvp";
+const IMAGE_NAME = "my-desktop";
 // Named volume for /root so downloads, browser profile and desktop settings
-// survive container restarts and Chromium/Desktop switches.
+// survive container restarts.
 const HOME_VOLUME = "my-browser-home";
 const NOVNC_PORT = 6080;
-
-const IMAGES = {
-  chromium: "my-browser",
-  desktop: "my-desktop",
-} as const;
-
-type SessionType = keyof typeof IMAGES;
-
-function isSessionType(value: unknown): value is SessionType {
-  return typeof value === "string" && value in IMAGES;
-}
 
 // Codespaces forwards each port to its own hostname, so the browser cannot
 // reach the container through localhost. Set NOVNC_BASE_URL to the forwarded
@@ -31,8 +21,7 @@ function novncUrl() {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// noVNC only tries to connect once on load, and the desktop image takes
-// several seconds before x11vnc listens, so wait until port 5900 answers
+// noVNC only tries to connect once on load, so wait until x11vnc listens
 // inside the container before handing the URL to the iframe.
 async function waitForVnc(timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs;
@@ -53,38 +42,25 @@ async function waitForVnc(timeoutMs = 30000) {
   throw new Error("VNC server did not become ready in time");
 }
 
-async function runningImage(): Promise<string | null> {
+async function isContainerRunning(): Promise<boolean> {
   try {
     const { stdout } = await execFileAsync("docker", [
       "inspect",
       "-f",
-      "{{.State.Running}} {{.Config.Image}}",
+      "{{.State.Running}}",
       CONTAINER_NAME,
     ]);
-    const [running, image] = stdout.trim().split(" ");
-    return running === "true" ? image : null;
+    return stdout.trim() === "true";
   } catch {
-    return null;
+    return false;
   }
 }
 
-export async function POST(request: Request) {
-  const body = await request.json().catch(() => ({}));
-  const type = body?.type ?? "chromium";
-  if (!isSessionType(type)) {
-    return NextResponse.json({ error: `Unknown session type: ${type}` }, { status: 400 });
-  }
-  const image = IMAGES[type];
-
+export async function POST() {
   try {
-    const current = await runningImage();
-    if (current === image) {
+    if (await isContainerRunning()) {
       await waitForVnc();
-      return NextResponse.json({ url: novncUrl(), type, status: "already_running" });
-    }
-    // Only one session fits on port 6080 for now, so switching type replaces it.
-    if (current !== null) {
-      await execFileAsync("docker", ["stop", CONTAINER_NAME]);
+      return NextResponse.json({ url: novncUrl(), status: "already_running" });
     }
 
     await execFileAsync("docker", [
@@ -97,15 +73,15 @@ export async function POST(request: Request) {
       `${NOVNC_PORT}:${NOVNC_PORT}`,
       "-v",
       `${HOME_VOLUME}:/root`,
-      image,
+      IMAGE_NAME,
     ]);
     await waitForVnc();
 
-    return NextResponse.json({ url: novncUrl(), type, status: "started" });
+    return NextResponse.json({ url: novncUrl(), status: "started" });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { error: `Failed to start ${type} container: ${message}` },
+      { error: `Failed to start desktop container: ${message}` },
       { status: 500 }
     );
   }
@@ -118,7 +94,7 @@ export async function DELETE() {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { error: `Failed to stop container: ${message}` },
+      { error: `Failed to stop desktop container: ${message}` },
       { status: 500 }
     );
   }
