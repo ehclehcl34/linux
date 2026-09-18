@@ -38,6 +38,4 @@ sleep 2
 
 echo "Starting noVNC..."
 
-exec /opt/novnc/utils/novnc_proxy \
-    --vnc localhost:5900 \
-    --listen 6080
+exec websockify --web /usr/share/novnc 6080 localhost:5900

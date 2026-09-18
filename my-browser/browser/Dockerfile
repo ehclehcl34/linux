@@ -3,19 +3,17 @@ FROM debian:bookworm
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DISPLAY=:99
 
+# noVNC from apt: the GitHub tarball ships without websockify (a git
+# submodule), so novnc_proxy exits immediately and nothing listens on 6080.
 RUN apt-get update && apt-get install -y \
     chromium \
     xvfb \
     x11vnc \
     fluxbox \
-    wget \
+    novnc \
+    websockify \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-
-RUN mkdir -p /opt/novnc
-
-RUN wget -qO- https://github.com/novnc/noVNC/archive/refs/heads/master.tar.gz \
-    | tar xz --strip-components=1 -C /opt/novnc
 
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
