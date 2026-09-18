@@ -5,6 +5,9 @@ import { NextResponse } from "next/server";
 const execFileAsync = promisify(execFile);
 
 const CONTAINER_NAME = "my-browser-mvp";
+// Named volume for /root so downloads, browser profile and desktop settings
+// survive container restarts and Chromium/Desktop switches.
+const HOME_VOLUME = "my-browser-home";
 const NOVNC_PORT = 6080;
 
 const IMAGES = {
@@ -92,6 +95,8 @@ export async function POST(request: Request) {
       CONTAINER_NAME,
       "-p",
       `${NOVNC_PORT}:${NOVNC_PORT}`,
+      "-v",
+      `${HOME_VOLUME}:/root`,
       image,
     ]);
     await waitForVnc();

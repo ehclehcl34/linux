@@ -25,6 +25,10 @@ docker build -t my-desktop .
 씁니다. 아직 6080 포트에 세션 하나만 올라가므로, 다른 종류를 고르면 기존
 컨테이너를 멈추고 새로 띄웁니다.
 
+컨테이너의 `/root`(다운로드, Chromium 프로필, XFCE 설정)는 Docker 볼륨
+`my-browser-home`에 저장되어 컨테이너를 껐다 켜거나 Chromium ↔ Desktop을
+전환해도 유지됩니다. 초기화하려면 `docker volume rm my-browser-home`.
+
 ### browser/ (v0.1)
 
 Docker 컨테이너 하나로 다음을 실행합니다:
