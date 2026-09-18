@@ -8,8 +8,12 @@ const CONTAINER_NAME = "my-browser-mvp";
 const IMAGE_NAME = "my-browser";
 const NOVNC_PORT = 6080;
 
+// Codespaces forwards each port to its own hostname, so the browser cannot
+// reach the container through localhost. Set NOVNC_BASE_URL to the forwarded
+// address of port 6080 there.
 function novncUrl() {
-  return `http://localhost:${NOVNC_PORT}/vnc.html?autoconnect=true&resize=scale`;
+  const base = process.env.NOVNC_BASE_URL ?? `http://localhost:${NOVNC_PORT}`;
+  return `${base.replace(/\/$/, "")}/vnc.html?autoconnect=true&resize=scale`;
 }
 
 async function isContainerRunning(): Promise<boolean> {

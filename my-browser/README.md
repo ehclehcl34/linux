@@ -64,6 +64,19 @@ npm run dev
 Docker 데몬이 같은 호스트에 있어야 하고(로컬/Codespaces 모두 해당), `browser/`
 이미지가 미리 빌드되어 있어야 합니다.
 
+#### Codespaces에서 실행할 때
+
+브라우저로 Codespaces를 쓰는 경우 포트마다 호스트명이 달라서, 사용자 브라우저의
+`localhost:6080`은 컨테이너에 닿지 않습니다. 6080 포트의 Forwarded Address를
+`NOVNC_BASE_URL`로 넘겨주세요:
+
+```bash
+NOVNC_BASE_URL=https://xxxxx-6080.app.github.dev npm run dev
+```
+
+또한 **Ports** 탭에서 6080 포트의 Visibility를 `Public`으로 바꿔야 iframe에서
+인증 리다이렉트 없이 로드됩니다.
+
 ## 다음 단계
 
 - v0.3+: 세션 ID 기반 컨테이너 관리(사용자별 컨테이너, 자동 삭제), 여러 사용자
