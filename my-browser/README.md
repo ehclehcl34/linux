@@ -7,8 +7,23 @@ Browser.lol 스타일 원격 브라우저 프로젝트. 현재 v0.2까지 진행
 ```
 my-browser/
 ├── browser/   # Chromium + Xvfb + x11vnc + noVNC Docker 이미지 (v0.1)
+├── desktop/   # XFCE 리눅스 데스크톱 + Chromium 이미지 (v0.2.1)
 └── web/       # Next.js 프론트엔드 + API (v0.2)
 ```
+
+### desktop/ (v0.2.1)
+
+브라우저 하나 대신 XFCE 데스크톱 전체(바탕화면, 파일관리자, 터미널, Chromium)를
+띄우는 이미지입니다. 화면 전송 구조는 `browser/`와 동일합니다.
+
+```bash
+cd my-browser/desktop
+docker build -t my-desktop .
+```
+
+웹 UI의 Environment 드롭다운에서 "Linux Desktop (XFCE)"를 고르면 이 이미지를
+씁니다. 아직 6080 포트에 세션 하나만 올라가므로, 다른 종류를 고르면 기존
+컨테이너를 멈추고 새로 띄웁니다.
 
 ### browser/ (v0.1)
 
