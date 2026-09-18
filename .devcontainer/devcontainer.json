@@ -1,0 +1,9 @@
+{
+  "name": "my-browser",
+  "forwardPorts": [3000, 6080],
+  "portsAttributes": {
+    "3000": { "label": "Web UI", "onAutoForward": "notify" },
+    "6080": { "label": "noVNC", "onAutoForward": "silent" }
+  },
+  "postAttachCommand": "gh codespace ports visibility 6080:public -c \"$CODESPACE_NAME\" || true"
+}
