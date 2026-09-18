@@ -45,7 +45,12 @@ export default function Home() {
 
       <div className="screen">
         {browserUrl ? (
-          <iframe src={browserUrl} title="Remote browser" allow="clipboard-read; clipboard-write" />
+          <iframe
+            src={browserUrl}
+            title="Remote browser"
+            allow="fullscreen; clipboard-read; clipboard-write"
+            allowFullScreen
+          />
         ) : (
           <div className="screen-placeholder">Start a browser to see it here</div>
         )}
