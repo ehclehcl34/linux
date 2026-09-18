@@ -23,7 +23,31 @@ function isSessionType(value: unknown): value is SessionType {
 // address of port 6080 there.
 function novncUrl() {
   const base = process.env.NOVNC_BASE_URL ?? `http://localhost:${NOVNC_PORT}`;
-  return `${base.replace(/\/$/, "")}/vnc.html?autoconnect=true&resize=scale`;
+  return `${base.replace(/\/$/, "")}/vnc.html?autoconnect=true&resize=scale&reconnect=true&reconnect_delay=1000`;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// noVNC only tries to connect once on load, and the desktop image takes
+// several seconds before x11vnc listens, so wait until port 5900 answers
+// inside the container before handing the URL to the iframe.
+async function waitForVnc(timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      await execFileAsync("docker", [
+        "exec",
+        CONTAINER_NAME,
+        "bash",
+        "-c",
+        "exec 3<>/dev/tcp/127.0.0.1/5900",
+      ]);
+      return;
+    } catch {
+      await sleep(500);
+    }
+  }
+  throw new Error("VNC server did not become ready in time");
 }
 
 async function runningImage(): Promise<string | null> {
@@ -52,6 +76,7 @@ export async function POST(request: Request) {
   try {
     const current = await runningImage();
     if (current === image) {
+      await waitForVnc();
       return NextResponse.json({ url: novncUrl(), type, status: "already_running" });
     }
     // Only one session fits on port 6080 for now, so switching type replaces it.
@@ -69,6 +94,7 @@ export async function POST(request: Request) {
       `${NOVNC_PORT}:${NOVNC_PORT}`,
       image,
     ]);
+    await waitForVnc();
 
     return NextResponse.json({ url: novncUrl(), type, status: "started" });
   } catch (error) {
