@@ -24,6 +24,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# Chromium refuses to run as root without --no-sandbox; Debian's wrapper
+# reads extra flags from /etc/chromium.d so the desktop launcher gets them too.
+RUN echo 'export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --no-sandbox --disable-dev-shm-usage --disable-gpu --lang=ko-KR"' \
+    > /etc/chromium.d/00-container
+
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
