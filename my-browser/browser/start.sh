@@ -21,6 +21,7 @@ chromium \
     --disable-gpu \
     --no-first-run \
     --no-default-browser-check \
+    --lang=ko-KR \
     about:blank &
 
 sleep 3
