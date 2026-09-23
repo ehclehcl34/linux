@@ -407,7 +407,7 @@ const T = [
   { n: '런던', t: 'city', g: 8, p: 350000 },
   { n: '뉴욕', t: 'city', g: 8, p: 350000 },
   { n: '사회복지기금 접수', t: 'fundIn', e: '🏦' },
-  { n: '서울', t: 'special', p: 1000000, e: '🏯' },
+  { n: '서울', t: 'special', p: 1000000, r: 1000000, e: '🏯' },
 ];
 const ISLAND = 10, SPACE = 30, COLUMBIA = 32;
 
@@ -522,6 +522,7 @@ function ownsGroup(pi, g) { return T.every((t, i) => t.g !== g || S.owner[i] ===
 function buildCost(i) { return Math.round(T[i].p * 0.5 / 1000) * 1000; }
 function rent(i, level = S.level[i]) {
   const t = T[i];
+  if (t.r) return t.r;   // 통행료가 따로 정해진 곳 (서울)
   if (t.t === 'special') return Math.round(t.p * 0.3 / 1000) * 1000;
   let r = t.p * RENT_MUL[level];
   if (level === 0 && S.owner[i] >= 0 && ownsGroup(S.owner[i], t.g)) r *= 2;
