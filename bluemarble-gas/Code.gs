@@ -95,14 +95,15 @@ function pruneIndex_(props, index, prefix, max) {
  * 자주 읽는 값은 CacheService에, 영구 보관은 ScriptProperties에 둡니다.
  */
 
-function createRoom(name, cid) {
+function createRoom(name, cid, avatar) {
   name = cleanName_(name);
+  avatar = cleanAvatar_(avatar);
   cid = cleanCid_(cid);
   return withLock_(function () {
     var props = PropertiesService.getScriptProperties();
     var index = readJson_(props, ROOM_INDEX_KEY);
     var code = newCode_(index, 5);
-    var room = { v: 1, host: cid, lobby: [{ name: name, cid: cid, ai: false }], game: null };
+    var room = { v: 1, host: cid, lobby: [{ name: name, cid: cid, ai: false, avatar: avatar }], game: null };
     writeRoom_(code, room);
     index[code] = Date.now();
     pruneIndex_(props, index, ROOM_PREFIX, MAX_ROOMS);
@@ -112,8 +113,9 @@ function createRoom(name, cid) {
 }
 
 /** 방 참가. 이미 시작한 방이면 같은 이름의 자리로 다시 들어갈 수 있다. */
-function joinRoom(code, name, cid) {
+function joinRoom(code, name, cid, avatar) {
   code = roomCode_(code);
+  avatar = cleanAvatar_(avatar);
   name = cleanName_(name);
   cid = cleanCid_(cid);
   return withLock_(function () {
@@ -128,7 +130,7 @@ function joinRoom(code, name, cid) {
         if (room.game.players[i]) { room.game.players[i].cid = cid; room.game.players[i].ai = false; }
       } else {
         if (room.lobby.length >= MAX_SEATS) throw new Error('방이 꽉 찼습니다.');
-        room.lobby.push({ name: uniqueName_(room, name), cid: cid, ai: false });
+        room.lobby.push({ name: uniqueName_(room, name), cid: cid, ai: false, avatar: avatar });
       }
       room.v++;
       writeRoom_(code, room);
@@ -142,7 +144,7 @@ function addBot(code, cid) {
   return editLobby_(code, cid, function (room) {
     if (room.lobby.length >= MAX_SEATS) throw new Error('방이 꽉 찼습니다.');
     var n = room.lobby.filter(function (s) { return s.ai; }).length + 1;
-    room.lobby.push({ name: uniqueName_(room, '컴퓨터' + n), cid: null, ai: true });
+    room.lobby.push({ name: uniqueName_(room, '컴퓨터' + n), cid: null, ai: true, avatar: '🤖' });
   });
 }
 
@@ -280,6 +282,11 @@ function roomCode_(code) {
 function cleanName_(name) {
   name = String(name || '').trim().slice(0, 10);
   return name || '플레이어';
+}
+
+function cleanAvatar_(avatar) {
+  avatar = String(avatar || '');
+  return avatar.length > 0 && avatar.length <= 4 && !/[<>&"']/.test(avatar) ? avatar : '';
 }
 
 function cleanCid_(cid) {
