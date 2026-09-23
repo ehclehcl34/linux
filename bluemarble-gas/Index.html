@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>부루마블</title>
+<style>
+  :root {
+    --line: #23352b;
+    --tile: #fffdf5;
+    --ink: #1d241f;
+    --muted: #66706a;
+    --gold: #f2b705;
+    --panel: #fffdf5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, sans-serif;
+    background: radial-gradient(circle at 50% 30%, #1b6a50, #0a2a20);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+  button {
+    font: inherit; cursor: pointer; border: 0; border-radius: 8px;
+    padding: .55em 1em; background: #2e7d5b; color: #fff; font-weight: 700;
+    box-shadow: 0 2px 0 rgba(0,0,0,.25);
+  }
+  button:hover { filter: brightness(1.1); }
+  button:disabled { opacity: .45; cursor: default; filter: none; }
+  button.alt { background: #8a948e; }
+  button.gold { background: var(--gold); color: #3a2c00; }
+  input, select { font: inherit; padding: .4em .5em; border: 1px solid #b9c2bc; border-radius: 6px; background: #fff; }
+
+  #app { display: flex; gap: 14px; padding: 12px; justify-content: center; align-items: flex-start; flex-wrap: wrap; }
+
+  /* ---------- 보드 ---------- */
+  #board {
+    --size: min(96vw, 94vh, 860px);
+    width: var(--size); height: var(--size);
+    display: grid;
+    grid-template-columns: 1.5fr repeat(9, 1fr) 1.5fr;
+    grid-template-rows: 1.5fr repeat(9, 1fr) 1.5fr;
+    gap: 2px; background: var(--line); border: 3px solid var(--line); border-radius: 10px;
+    font-size: max(7px, calc(var(--size) / 72));
+    box-shadow: 0 10px 30px rgba(0,0,0,.4);
+    flex: none;
+  }
+  .tile {
+    --own: transparent;
+    position: relative; background: var(--tile); overflow: hidden;
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    line-height: 1.1; cursor: pointer; border-radius: 2px;
+  }
+  .tile.owned { background: color-mix(in srgb, var(--own) 20%, var(--tile)); box-shadow: inset 0 0 0 .25em var(--own); }
+  .tile .band { width: 100%; height: 20%; flex: none; }
+  .tile .name { font-weight: 700; padding: .15em .1em 0; word-break: keep-all; overflow-wrap: anywhere; }
+  .tile .emo { font-size: 1.6em; line-height: 1.2; }
+  .tile .price { color: var(--muted); font-size: .9em; }
+  .tile .bld { font-size: 1.2em; line-height: 1; }
+  .tile .tokens { position: absolute; bottom: .15em; left: 0; right: 0; display: flex; justify-content: center; flex-wrap: wrap; gap: .1em; }
+  .tile.corner .emo { font-size: 2.4em; }
+  .tile.corner .name { font-size: 1.1em; }
+  .tile.selectable { animation: pulse 1s infinite; }
+  .tile.info-on { outline: .2em solid var(--gold); outline-offset: -.2em; }
+  @keyframes pulse { 50% { background: #fff1b8; } }
+  .tok {
+    width: 1.5em; height: 1.5em; border-radius: 50%; border: .12em solid #fff;
+    color: #fff; font-size: .95em; font-weight: 800; display: grid; place-items: center;
+    box-shadow: 0 1px 2px rgba(0,0,0,.5);
+  }
+  .tok.active { transform: scale(1.25); z-index: 2; box-shadow: 0 0 0 .15em var(--gold); }
+
+  #center {
+    grid-area: 2 / 2 / 11 / 11;
+    background: linear-gradient(160deg, #e7f4ea, #cfe7d6);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: .8em; padding: 1em; text-align: center; overflow: auto; font-size: 1.25em;
+  }
+  .logo { font-size: 2.2em; font-weight: 900; letter-spacing: .05em; color: #1a5a8a; text-shadow: 2px 2px 0 #fff; }
+  .logo small { display: block; font-size: .35em; color: var(--muted); letter-spacing: .3em; }
+  #turnInfo { font-weight: 800; font-size: 1.1em; }
+  #dice { display: flex; gap: .8em; }
+  .die {
+    width: 3.2em; height: 3.2em; background: #fff; border-radius: .5em; padding: .35em;
+    display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+    box-shadow: 0 3px 0 #9aa, 0 4px 10px rgba(0,0,0,.2);
+  }
+  .die i { border-radius: 50%; margin: 12%; }
+  .die i.on { background: #222; }
+  .die.rolling { animation: shake .12s infinite; }
+  @keyframes shake { 50% { transform: rotate(12deg); } }
+  #msg { min-height: 2.6em; font-weight: 600; }
+  #actions { display: flex; gap: .6em; flex-wrap: wrap; justify-content: center; min-height: 2.6em; }
+  #tileInfo { font-size: .85em; background: #fff; border-radius: 8px; padding: .5em .8em; max-width: 90%; }
+  #tileInfo:empty { display: none; }
+  #tileInfo table { border-collapse: collapse; margin: .3em auto 0; }
+  #tileInfo td { padding: .05em .6em; }
+
+  /* ---------- 사이드 패널 ---------- */
+  #side { width: min(96vw, 340px); display: flex; flex-direction: column; gap: 10px; }
+  .card { background: var(--panel); border-radius: 10px; padding: 10px 12px; box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+  .pl { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-bottom: 1px solid #e3e7e4; }
+  .pl:last-child { border-bottom: 0; }
+  .pl.cur { background: #fff4c7; border-radius: 6px; }
+  .pl.dead { opacity: .4; text-decoration: line-through; }
+  .pl .tok { font-size: 14px; flex: none; }
+  .pl .info { flex: 1; min-width: 0; }
+  .pl .nm { font-weight: 800; }
+  .pl .sub { font-size: 12px; color: var(--muted); }
+  .pl .money { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #log { max-height: 260px; overflow: auto; font-size: 13px; line-height: 1.5; }
+  #log div { border-bottom: 1px dashed #e3e7e4; padding: 2px 0; }
+  .code { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 800; letter-spacing: .15em; background: #eef3ef; padding: 1px 6px; border-radius: 4px; }
+  h3 { margin: 0 0 6px; font-size: 15px; }
+
+  /* ---------- 오버레이 ---------- */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none;
+    align-items: center; justify-content: center; padding: 16px; z-index: 10;
+  }
+  .overlay.show { display: flex; }
+  .modal { background: var(--panel); border-radius: 14px; padding: 20px; width: min(100%, 440px); max-height: 92vh; overflow: auto; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+  .modal h2 { margin: 0 0 12px; }
+  .setup-row { display: flex; gap: 8px; margin: 6px 0; align-items: center; }
+  .setup-row input { flex: 1; min-width: 0; }
+  .keycard { background: linear-gradient(145deg, #ffe27a, #f2b705); text-align: center; width: min(100%, 320px); cursor: pointer; }
+  .keycard .k-emo { font-size: 48px; }
+  .keycard h2 { margin: 6px 0; }
+  .keycard p { font-size: 17px; margin: 8px 0 14px; }
+  .rank { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #e3e7e4; }
+  .hint { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="board">
+    <div id="center">
+      <div class="logo">부루마블<small>BLUE MARBLE</small></div>
+      <div id="turnInfo"></div>
+      <div id="dice"><div class="die" id="d1"></div><div class="die" id="d2"></div></div>
+      <div id="msg"></div>
+      <div id="actions"></div>
+      <div id="tileInfo"></div>
+    </div>
+  </div>
+
+  <aside id="side">
+    <div class="card">
+      <h3>플레이어</h3>
+      <div id="players"></div>
+    </div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <span>🏦 사회복지기금 <b id="fund">0원</b></span>
+        <span>라운드 <b id="round">1</b></span>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="btnSave" class="alt">💾 저장</button>
+        <button id="btnNew" class="alt">🆕 새 게임</button>
+        <span id="saveInfo" class="hint"></span>
+      </div>
+    </div>
+    <div class="card">
+      <h3>기록</h3>
+      <div id="log"></div>
+    </div>
+  </aside>
+</div>
+
+<!-- 시작 화면 -->
+<div id="setup" class="overlay show">
+  <div class="modal">
+    <h2>🎲 부루마블</h2>
+    <div class="row">
+      <label>인원 <select id="pCount">
+        <option value="2">2명</option><option value="3">3명</option><option value="4" selected>4명</option>
+      </select></label>
+      <label>라운드 제한 <select id="maxRound">
+        <option value="0">무제한</option><option value="15">15</option><option value="25" selected>25</option><option value="40">40</option>
+      </select></label>
+    </div>
+    <div id="pRows"></div>
+    <p class="hint">라운드 제한에 도달하면 총자산(현금+땅+건물)이 가장 많은 사람이 승리합니다. 혼자라면 나머지를 컴퓨터로 두세요.</p>
+    <div class="row"><button id="btnStart" class="gold">게임 시작</button></div>
+    <hr style="border:0;border-top:1px solid #e3e7e4;margin:16px 0">
+    <h3>이어하기</h3>
+    <div class="row" id="resumeRow"></div>
+    <div class="row" style="margin-top:8px">
+      <input id="codeInput" placeholder="저장 코드 6자리" maxlength="6" style="width:9em;text-transform:uppercase">
+      <button id="btnLoad" class="alt">불러오기</button>
+    </div>
+    <div id="setupMsg" class="hint" style="margin-top:6px"></div>
+  </div>
+</div>
+
+<!-- 황금열쇠 카드 -->
+<div id="cardOv" class="overlay">
+  <div class="modal keycard" id="keycard">
+    <div class="k-emo">🔑</div>
+    <div class="hint">황금열쇠</div>
+    <h2 id="cardTitle"></h2>
+    <p id="cardDesc"></p>
+    <button class="alt" id="cardOk">확인</button>
+  </div>
+</div>
+
+<!-- 게임 종료 -->
+<div id="overOv" class="overlay">
+  <div class="modal">
+    <h2 id="overTitle">🏆 게임 종료</h2>
+    <div id="overBody"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="gold" id="btnAgain">새 게임</button>
+      <button class="alt" id="btnView">보드 보기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= 설정 ================= */
+const START_MONEY = 3000000;   // 시작 자금
+const SALARY = 200000;         // 출발지 통과 월급
+const FUND_PAY = 150000;       // 사회복지기금 납부액
+const SPACE_FEE = 200000;      // 우주여행 탑승료 (컬럼비아호 주인에게)
+const ISLAND_TURNS = 3;        // 무인도 대기 턴
+const RENT_MUL = [0.2, 1, 2.5, 5];   // 땅/별장/빌딩/호텔 통행료 배수(땅값 기준)
+const BLD_ICON = ['', '🏠', '🏢', '🏨'];
+const BLD_NAME = ['땅', '별장', '빌딩', '호텔'];
+const P_COLORS = ['#e53935', '#1e88e5', '#43a047', '#fb8c00'];
+const GROUP_COLORS = { 1: '#9ccc65', 2: '#26c6da', 3: '#ab47bc', 4: '#ff7043', 5: '#ffca28', 6: '#42a5f5', 7: '#ec407a', 8: '#5c6bc0' };
+const DEFAULT_NAMES = ['빨강', '파랑', '초록', '주황'];
+
+const T = [
+  { n: '출발', t: 'start', e: '🏁' },
+  { n: '타이베이', t: 'city', g: 1, p: 50000 },
+  { n: '황금열쇠', t: 'key', e: '🔑' },
+  { n: '베이징', t: 'city', g: 1, p: 80000 },
+  { n: '마닐라', t: 'city', g: 1, p: 80000 },
+  { n: '제주도', t: 'special', p: 200000, e: '🍊' },
+  { n: '싱가포르', t: 'city', g: 2, p: 100000 },
+  { n: '황금열쇠', t: 'key', e: '🔑' },
+  { n: '카이로', t: 'city', g: 2, p: 100000 },
+  { n: '이스탄불', t: 'city', g: 2, p: 120000 },
+  { n: '무인도', t: 'island', e: '🌴' },
+  { n: '아테네', t: 'city', g: 3, p: 140000 },
+  { n: '황금열쇠', t: 'key', e: '🔑' },
+  { n: '코펜하겐', t: 'city', g: 3, p: 160000 },
+  { n: '스톡홀름', t: 'city', g: 3, p: 160000 },
+  { n: '콩코드 여객기', t: 'special', p: 200000, e: '✈️' },
+  { n: '베른', t: 'city', g: 4, p: 180000 },
+  { n: '황금열쇠', t: 'key', e: '🔑' },
+  { n: '베를린', t: 'city', g: 4, p: 180000 },
+  { n: '오타와', t: 'city', g: 4, p: 200000 },
+  { n: '사회복지기금 수령', t: 'fundOut', e: '💰' },
+  { n: '부에노스 아이레스', t: 'city', g: 5, p: 220000 },
+  { n: '황금열쇠', t: 'key', e: '🔑' },
+  { n: '상파울루', t: 'city', g: 5, p: 240000 },
+  { n: '시드니', t: 'city', g: 5, p: 240000 },
+  { n: '부산', t: 'special', p: 500000, e: '⚓' },
+  { n: '하와이', t: 'city', g: 6, p: 260000 },
+  { n: '리스본', t: 'city', g: 6, p: 260000 },
+  { n: '퀸 엘리자베스호', t: 'special', p: 300000, e: '🚢' },
+  { n: '마드리드', t: 'city', g: 6, p: 280000 },
+  { n: '우주여행', t: 'space', e: '🚀' },
+  { n: '도쿄', t: 'city', g: 7, p: 300000 },
+  { n: '컬럼비아호', t: 'special', p: 450000, e: '🛰️' },
+  { n: '파리', t: 'city', g: 7, p: 320000 },
+  { n: '로마', t: 'city', g: 7, p: 320000 },
+  { n: '황금열쇠', t: 'key', e: '🔑' },
+  { n: '런던', t: 'city', g: 8, p: 350000 },
+  { n: '뉴욕', t: 'city', g: 8, p: 350000 },
+  { n: '사회복지기금 접수', t: 'fundIn', e: '🏦' },
+  { n: '서울', t: 'special', p: 1000000, e: '🏯' },
+];
+const ISLAND = 10, SPACE = 30, COLUMBIA = 32;
+
+const KEYS = [
+  { n: '복권 당첨', d: '축하합니다! 당첨금 20만원을 받습니다.', f: p => gain(p, 200000) },
+  { n: '노벨 평화상', d: '상금 30만원을 받습니다.', f: p => gain(p, 300000) },
+  { n: '장학금', d: '장학금 10만원을 받습니다.', f: p => gain(p, 100000) },
+  { n: '연금 혜택', d: '연금 5만원을 받습니다.', f: p => gain(p, 50000) },
+  { n: '과속 운전', d: '벌금 5만원을 냅니다.', f: p => pay(idx(p), 50000, null) },
+  { n: '해외 유학', d: '학비 10만원을 냅니다.', f: p => pay(idx(p), 100000, null) },
+  { n: '병원비', d: '병원비 5만원을 냅니다.', f: p => pay(idx(p), 50000, null) },
+  { n: '건물 수리비', d: '가진 건물 한 단계당 3만원을 냅니다.', f: p => {
+      const n = S.owner.reduce((s, o, i) => s + (o === idx(p) ? S.level[i] : 0), 0);
+      if (n) pay(idx(p), n * 30000, null); else log('수리할 건물이 없습니다. 휴~');
+    } },
+  { n: '생일 축하', d: '모든 플레이어에게서 1만원씩 축하금을 받습니다.', f: p => {
+      S.players.forEach((q, qi) => { if (q !== p && q.alive) pay(qi, 10000, idx(p)); });
+    } },
+  { n: '한턱 쏘기', d: '모든 플레이어에게 1만원씩 줍니다.', f: p => {
+      S.players.forEach((q, qi) => { if (q !== p && q.alive && p.alive) pay(idx(p), 10000, qi); });
+    } },
+  { n: '무인도 표류', d: '폭풍을 만나 무인도로 떠내려갑니다.', f: p => sendIsland(p) },
+  { n: '고속도로', d: '출발지로 바로 이동하고 월급을 받습니다.', f: async p => { await moveTo(p, 0, true); } },
+  { n: '우주여행 초대장', d: '우주여행 칸으로 이동합니다.', f: async p => { await moveTo(p, SPACE, true); await land(p); } },
+  { n: '뒤로 이동', d: '뒤로 두 칸 이동합니다.', f: async p => { await stepMove(p, -2); await land(p); } },
+  { n: '서울 올림픽', d: '올림픽을 보러 서울로 이동합니다.', f: async p => { await moveTo(p, 39, true); await land(p); } },
+  { n: '부산 관광', d: '부산으로 여행을 떠납니다.', f: async p => { await moveTo(p, 25, true); await land(p); } },
+  { n: '제주도 관광', d: '제주도로 여행을 떠납니다.', f: async p => { await moveTo(p, 5, true); await land(p); } },
+  { n: '우대권', d: '다음에 내야 할 통행료 1회가 면제됩니다.', f: p => { p.pass++; } },
+  { n: '무인도 탈출권', d: '무인도에 갇히면 바로 탈출할 수 있습니다.', f: p => { p.escape++; } },
+];
+
+/* ================= 상태 ================= */
+let S = null;          // 게임 상태 (저장 대상)
+let busy = false;      // 애니메이션/처리 중
+let SPEED = 1;         // 애니메이션 배속 (작을수록 빠름)
+let infoTile = -1;
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms * SPEED));
+const cur = () => S.players[S.cur];
+const idx = p => S.players.indexOf(p);
+const won = v => v.toLocaleString('ko-KR') + '원';
+const man = v => (v >= 10000 ? (v / 10000).toLocaleString('ko-KR') + '만' : v.toLocaleString('ko-KR'));
+const rnd6 = () => 1 + Math.floor(Math.random() * 6);
+const isProp = i => T[i].t === 'city' || T[i].t === 'special';
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+function newGame(cfg, maxRound) {
+  S = {
+    players: cfg.map((c, i) => ({
+      name: c.name, ai: c.ai, color: P_COLORS[i], money: START_MONEY, pos: 0,
+      alive: true, island: 0, space: false, pass: 0, escape: 0,
+    })),
+    owner: Array(40).fill(-1), level: Array(40).fill(0),
+    cur: 0, round: 1, maxRound, fund: 0, dbl: 0, extra: false,
+    phase: 'roll', pending: null, dice: [1, 1],
+    deck: shuffle(KEYS.map((_, i) => i)), deckPos: 0,
+    log: [], code: S && S.code || null, result: null,
+  };
+  log('게임 시작! 모두 ' + won(START_MONEY) + '을 받았습니다.');
+}
+
+function log(text) {
+  if (!S) return;
+  S.log.push(text);
+  if (S.log.length > 150) S.log.splice(0, S.log.length - 150);
+  renderLog();
+}
+
+/* ================= 규칙 계산 ================= */
+function ownsGroup(pi, g) { return T.every((t, i) => t.g !== g || S.owner[i] === pi); }
+function buildCost(i) { return Math.round(T[i].p * 0.5 / 1000) * 1000; }
+function rent(i, level = S.level[i]) {
+  const t = T[i];
+  if (t.t === 'special') return Math.round(t.p * 0.3 / 1000) * 1000;
+  let r = t.p * RENT_MUL[level];
+  if (level === 0 && S.owner[i] >= 0 && ownsGroup(S.owner[i], t.g)) r *= 2;
+  return Math.round(r / 1000) * 1000;
+}
+function canBuild(i) { return T[i].t === 'city' && S.level[i] < 3 && cur().money >= buildCost(i); }
+function assets(pi) {
+  const p = S.players[pi];
+  if (!p.alive) return 0;
+  return S.owner.reduce((s, o, i) => o === pi ? s + T[i].p + S.level[i] * buildCost(i) : s, p.money);
+}
+
+function gain(p, amt) { p.money += amt; }
+function credit(to, amt) {
+  if (typeof to === 'number') S.players[to].money += amt;
+  else if (to === 'fund') S.fund += amt;
+}
+/** fi 플레이어가 amt를 to(플레이어 번호 / 'fund' / null=은행)에게 지불. 모자라면 자산 매각, 그래도 모자라면 파산. */
+function pay(fi, amt, to) {
+  const p = S.players[fi];
+  if (!p.alive) return;
+  if (p.money < amt) liquidate(fi, amt);
+  if (p.money >= amt) { p.money -= amt; credit(to, amt); return; }
+  credit(to, p.money);
+  p.money = 0;
+  bankrupt(fi);
+}
+function liquidate(fi, need) {
+  const p = S.players[fi], sold = [];
+  const mine = () => S.owner.map((o, i) => o === fi ? i : -1).filter(i => i >= 0);
+  while (p.money < need) {
+    const b = mine().filter(i => S.level[i] > 0).sort((a, c) => buildCost(a) - buildCost(c))[0];
+    if (b !== undefined) {
+      sold.push(T[b].n + ' ' + BLD_NAME[S.level[b]]);
+      S.level[b]--; p.money += Math.floor(buildCost(b) / 2);
+      continue;
+    }
+    const l = mine().sort((a, c) => T[a].p - T[c].p)[0];
+    if (l === undefined) break;
+    sold.push(T[l].n);
+    S.owner[l] = -1; p.money += Math.floor(T[l].p / 2);
+  }
+  if (sold.length) log(`💸 ${p.name}: 자금 부족으로 반값 매각 — ${sold.join(', ')}`);
+}
+function bankrupt(fi) {
+  const p = S.players[fi];
+  p.alive = false; p.space = false; p.island = 0;
+  S.owner.forEach((o, i) => { if (o === fi) { S.owner[i] = -1; S.level[i] = 0; } });
+  if (fi === S.cur) { S.extra = false; S.pending = null; }
+  log(`☠️ ${p.name} 파산!`);
+}
+function sendIsland(p) {
+  p.pos = ISLAND; p.island = ISLAND_TURNS; p.space = false;
+  if (p === cur()) S.extra = false;
+  log(`🌴 ${p.name}: 무인도에 갇혔습니다 (${ISLAND_TURNS}턴)`);
+  render();
+}
+
+/* ================= 이동 ================= */
+async function stepMove(p, steps, fast) {
+  const dir = steps > 0 ? 1 : -1;
+  for (let k = 0; k < Math.abs(steps); k++) {
+    p.pos = (p.pos + dir + 40) % 40;
+    if (dir > 0 && p.pos === 0) { p.money += SALARY; log(`🏁 ${p.name}: 출발지 통과! 월급 ${won(SALARY)}`); }
+    render();
+    await sleep(fast ? 45 : 170);
+  }
+}
+async function moveTo(p, target, fast) { await stepMove(p, (target - p.pos + 40) % 40, fast); }
+
+async function land(p) {
+  if (!p.alive) return;
+  const i = p.pos, t = T[i], me = idx(p);
+  if (isProp(i)) {
+    const o = S.owner[i];
+    if (o < 0) {
+      if (p.money >= t.p) S.pending = { type: 'buy', tile: i };
+      else log(`${t.n}: 돈이 부족해 살 수 없습니다.`);
+    } else if (o === me) {
+      if (canBuild(i)) S.pending = { type: 'build', tile: i };
+    } else {
+      const r = rent(i);
+      if (p.pass > 0) { p.pass--; log(`🎫 ${p.name}: 우대권 사용 — ${t.n} 통행료 면제`); }
+      else { log(`💵 ${p.name} → ${S.players[o].name}: ${t.n} 통행료 ${won(r)}`); pay(me, r, o); }
+    }
+  } else if (t.t === 'key') {
+    await drawKey(p);
+  } else if (t.t === 'island') {
+    p.island = ISLAND_TURNS; S.extra = false;
+    log(`🌴 ${p.name}: 무인도 도착! ${ISLAND_TURNS}턴 동안 갇힙니다.`);
+  } else if (t.t === 'fundIn') {
+    log(`🏦 ${p.name}: 사회복지기금 ${won(FUND_PAY)} 납부`);
+    pay(me, FUND_PAY, 'fund');
+  } else if (t.t === 'fundOut') {
+    if (S.fund > 0) { log(`💰 ${p.name}: 사회복지기금 ${won(S.fund)} 수령!`); p.money += S.fund; S.fund = 0; }
+    else log('사회복지기금이 비어 있습니다.');
+  } else if (t.t === 'space') {
+    p.space = true; S.extra = false;
+    log(`🚀 ${p.name}: 우주정거장 도착! 다음 턴에 원하는 칸으로 날아갑니다.`);
+  }
+  render();
+}
+
+async function drawKey(p) {
+  if (S.deckPos >= S.deck.length) { S.deck = shuffle(KEYS.map((_, i) => i)); S.deckPos = 0; }
+  const k = KEYS[S.deck[S.deckPos++]];
+  log(`🔑 ${p.name} 황금열쇠 — ${k.n}: ${k.d}`);
+  await showCard(k.n, k.d, p.ai);
+  await k.f(p);
+}
+
+function showCard(title, desc, auto) {
+  $('cardTitle').textContent = title;
+  $('cardDesc').textContent = desc;
+  $('cardOv').classList.add('show');
+  return new Promise(res => {
+    let done = false;
+    const close = () => { if (done) return; done = true; $('cardOv').classList.remove('show'); $('keycard').onclick = null; res(); };
+    $('keycard').onclick = close;
+    if (auto || SPEED < 0.2) setTimeout(close, 1400 * SPEED);
+  });
+}
+
+/* ================= 턴 진행 ================= */
+async function actRoll() {
+  if (busy || !S || S.phase !== 'roll') return;
+  busy = true; infoTile = -1;
+  try {
+    const p = cur();
+    if (p.island > 0 && p.escape > 0) { p.escape--; p.island = 0; log(`🎫 ${p.name}: 무인도 탈출권 사용!`); }
+    const d = [rnd6(), rnd6()];
+    await rollAnim(d);
+    const sum = d[0] + d[1], dbl = d[0] === d[1];
+    log(`🎲 ${p.name}: ${d[0]} + ${d[1]} = ${sum}${dbl ? ' (더블!)' : ''}`);
+
+    if (p.island > 0) {
+      S.extra = false;
+      if (dbl) {
+        p.island = 0;
+        log(`🎉 ${p.name}: 더블로 무인도 탈출!`);
+        await stepMove(p, sum); await land(p);
+      } else {
+        p.island--;
+        log(p.island > 0 ? `🌴 ${p.name}: 탈출 실패 (남은 ${p.island}턴)` : `🌴 ${p.name}: 다음 턴에 무인도를 떠납니다.`);
+      }
+    } else {
+      if (dbl) {
+        S.dbl++;
+        if (S.dbl >= 3) { log('🚨 더블 3번! 과속으로 무인도행'); sendIsland(p); finish(); return; }
+        S.extra = true;
+      } else { S.dbl = 0; S.extra = false; }
+      await stepMove(p, sum); await land(p);
+    }
+    finish();
+  } finally { busy = false; render(); }
+}
+
+async function actSpace(i) {
+  if (busy || !S || S.phase !== 'space' || i === SPACE) return;
+  busy = true; infoTile = -1;
+  try {
+    const p = cur(), o = S.owner[COLUMBIA];
+    p.space = false; S.extra = false;
+    if (o >= 0 && o !== S.cur) {
+      log(`🛰️ ${p.name}: 컬럼비아호 탑승료 ${won(SPACE_FEE)} → ${S.players[o].name}`);
+      pay(S.cur, SPACE_FEE, o);
+    }
+    if (p.alive) {
+      log(`🚀 ${p.name}: ${T[i].n}(으)로 우주여행!`);
+      await moveTo(p, i, true); await land(p);
+    }
+    finish();
+  } finally { busy = false; render(); }
+}
+
+function actConfirm() {
+  if (busy || !S || S.phase !== 'action' || !S.pending) return;
+  const { type, tile } = S.pending, p = cur(), t = T[tile];
+  S.pending = null;
+  if (type === 'buy' && p.money >= t.p && S.owner[tile] < 0) {
+    p.money -= t.p; S.owner[tile] = S.cur;
+    log(`🏷️ ${p.name}: ${t.n} 구입 (${won(t.p)})`);
+    if (canBuild(tile)) S.pending = { type: 'build', tile };   // 땅 사면서 바로 건물 한 채 가능
+  } else if (type === 'build' && canBuild(tile)) {
+    const c = buildCost(tile);
+    p.money -= c; S.level[tile]++;
+    log(`${BLD_ICON[S.level[tile]]} ${p.name}: ${t.n}에 ${BLD_NAME[S.level[tile]]} 건설 (${won(c)})`);
+  }
+  finish(); render();
+}
+
+function actSkip() {
+  if (busy || !S || S.phase !== 'action') return;
+  S.pending = null;
+  finish(); render();
+}
+
+function aliveCount() { return S.players.filter(p => p.alive).length; }
+
+/** 현재 행동이 끝난 뒤 다음 단계 결정 */
+function finish() {
+  if (S.phase === 'over') return;
+  if (aliveCount() <= 1) return endGame();
+  const p = cur();
+  if (S.pending && p.alive) { S.phase = 'action'; return; }
+  S.pending = null;
+  if (S.extra && p.alive && p.island === 0 && !p.space) {
+    S.extra = false; S.phase = 'roll';
+    log(`🔁 ${p.name}: 더블! 한 번 더 굴립니다.`);
+    return;
+  }
+  nextTurn();
+}
+
+function nextTurn() {
+  S.dbl = 0; S.extra = false; S.pending = null;
+  let n = S.cur;
+  do {
+    n = (n + 1) % S.players.length;
+    if (n === 0) S.round++;
+  } while (!S.players[n].alive);
+  S.cur = n;
+  if (S.maxRound && S.round > S.maxRound) { S.round = S.maxRound; return endGame('라운드 제한 도달'); }
+  S.phase = cur().space ? 'space' : 'roll';
+  autosave();
+}
+
+function endGame(reason) {
+  S.phase = 'over';
+  const ranking = S.players.map((p, i) => ({ i, a: assets(i), alive: p.alive }))
+    .sort((a, b) => (b.alive - a.alive) || (b.a - a.a));
+  S.result = { reason: reason || '나머지 플레이어 모두 파산', ranking };
+  log(`🏆 게임 종료 — ${S.players[ranking[0].i].name} 승리!`);
+  autosave();
+  render();
+}
+
+/* ================= 컴퓨터 플레이어 ================= */
+let aiTimer = null;
+function scheduleAI() {
+  if (aiTimer || !S || busy || S.phase === 'over' || !cur().ai) return;
+  aiTimer = setTimeout(() => { aiTimer = null; aiStep(); }, 750 * SPEED);
+}
+function aiStep() {
+  if (!S || busy || S.phase === 'over') return;
+  const p = cur();
+  if (!p.ai) return;
+  if (S.phase === 'roll') actRoll();
+  else if (S.phase === 'space') actSpace(aiSpaceTarget(p));
+  else if (S.phase === 'action') {
+    const { type, tile } = S.pending;
+    const cost = type === 'buy' ? T[tile].p : buildCost(tile);
+    const reserve = type === 'buy' ? 250000 : 450000;
+    if (p.money - cost >= reserve) actConfirm(); else actSkip();
+  }
+}
+function aiSpaceTarget(p) {
+  const budget = p.money - 250000;
+  let best = -1;
+  T.forEach((t, i) => {
+    if (i === SPACE || !isProp(i) || S.owner[i] >= 0 || t.p > budget) return;
+    if (best < 0 || t.p > T[best].p) best = i;
+  });
+  if (best >= 0) return best;
+  const mine = T.map((_, i) => i).filter(i => S.owner[i] === S.cur && T[i].t === 'city' && S.level[i] < 3);
+  return mine.length ? mine[Math.floor(Math.random() * mine.length)] : 0;
+}
+
+/* ================= 저장 ================= */
+const HAS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
+function gas(fn, ...args) {
+  return new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn](...args));
+}
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* 무시 */ } }
+function genCode() { const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 6; i++) s += c[Math.floor(Math.random() * c.length)]; return s; }
+const Store = {
+  async save(code, json) {
+    if (HAS_GAS) return gas('saveGame', code, json);
+    code = code || genCode(); lsSet('bm_save_' + code, json); return code;
+  },
+  async load(code) {
+    if (HAS_GAS) return gas('loadGame', code);
+    return lsGet('bm_save_' + code);
+  },
+};
+let saveChain = Promise.resolve();
+function autosave() {
+  if (!S) return;
+  saveChain = saveChain.then(async () => {
+    const data = JSON.stringify(Object.assign({}, S, { log: S.log.slice(-12) }));
+    try {
+      $('saveInfo').textContent = '저장 중…';
+      const code = await Store.save(S.code, data);
+      S.code = code; lsSet('bm_code', code);
+      $('saveInfo').innerHTML = `저장 코드 <span class="code">${code}</span>`;
+    } catch (e) {
+      $('saveInfo').textContent = '저장 실패: ' + (e && e.message || e);
+    }
+  });
+  return saveChain;
+}
+async function loadByCode(code) {
+  code = String(code || '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(code)) { $('setupMsg').textContent = '코드는 영문/숫자 6자리입니다.'; return; }
+  $('setupMsg').textContent = '불러오는 중…';
+  try {
+    const json = await Store.load(code);
+    if (!json) { $('setupMsg').textContent = '해당 코드의 저장 데이터가 없습니다.'; return; }
+    const st = JSON.parse(json);
+    if (!st.players || !st.owner) throw new Error('잘못된 데이터');
+    S = st; S.code = code; busy = false; infoTile = -1;
+    lsSet('bm_code', code);
+    if (S.phase === 'action' && !S.pending) finish();
+    log('📂 저장된 게임을 불러왔습니다.');
+    $('setup').classList.remove('show');
+    $('saveInfo').innerHTML = `저장 코드 <span class="code">${code}</span>`;
+    render();
+  } catch (e) {
+    $('setupMsg').textContent = '불러오기 실패: ' + (e && e.message || e);
+  }
+}
+
+/* ================= 화면 ================= */
+const PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+function drawDie(el, v) { el.innerHTML = Array.from({ length: 9 }, (_, k) => `<i class="${PIPS[v].includes(k) ? 'on' : ''}"></i>`).join(''); }
+async function rollAnim(d) {
+  const a = $('d1'), b = $('d2');
+  a.classList.add('rolling'); b.classList.add('rolling');
+  for (let k = 0; k < 8; k++) { drawDie(a, rnd6()); drawDie(b, rnd6()); await sleep(60); }
+  a.classList.remove('rolling'); b.classList.remove('rolling');
+  S.dice = d; drawDie(a, d[0]); drawDie(b, d[1]);
+}
+
+function tileGrid(i) {           // [row, col] (1-based), 출발은 오른쪽 아래
+  if (i <= 10) return [11, 11 - i];
+  if (i <= 20) return [11 - (i - 10), 1];
+  if (i <= 30) return [1, 1 + (i - 20)];
+  return [1 + (i - 30), 11];
+}
+
+const tileEls = [];
+function buildBoard() {
+  const board = $('board');
+  T.forEach((t, i) => {
+    const el = document.createElement('div');
+    const [r, c] = tileGrid(i);
+    el.className = 'tile' + (i % 10 === 0 ? ' corner' : '');
+    el.style.gridRow = r; el.style.gridColumn = c;
+    const band = t.t === 'city' ? GROUP_COLORS[t.g] : t.t === 'special' ? '#d4a017' : 'transparent';
+    el.innerHTML = `<div class="band" style="background:${band}"></div>` +
+      (t.e ? `<div class="emo">${t.e}</div>` : '') +
+      `<div class="name">${t.n}</div><div class="price"></div><div class="bld"></div><div class="tokens"></div>`;
+    el.addEventListener('click', () => onTileClick(i));
+    board.appendChild(el);
+    tileEls.push(el);
+  });
+}
+
+function onTileClick(i) {
+  if (!S) return;
+  if (S.phase === 'space' && !busy && !cur().ai && i !== SPACE) { actSpace(i); return; }
+  infoTile = infoTile === i ? -1 : i;
+  render();
+}
+
+function tileInfoHTML(i) {
+  const t = T[i];
+  if (!isProp(i)) {
+    const desc = {
+      start: `지나갈 때마다 월급 ${won(SALARY)}을 받습니다.`,
+      key: '황금열쇠 카드를 한 장 뽑습니다.',
+      island: `${ISLAND_TURNS}턴 동안 갇힙니다. 더블이 나오면 탈출!`,
+      fundIn: `사회복지기금 ${won(FUND_PAY)}을 냅니다.`,
+      fundOut: `모인 사회복지기금(${won(S.fund)})을 모두 받습니다.`,
+      space: `다음 턴에 원하는 칸으로 이동합니다. 컬럼비아호 주인에게 ${won(SPACE_FEE)} 탑승료.`,
+    }[t.t];
+    return `<b>${t.e || ''} ${t.n}</b><br>${desc}`;
+  }
+  const o = S.owner[i];
+  let h = `<b>${t.e || ''} ${t.n}</b> · 땅값 ${won(t.p)}<br>소유: ${o >= 0 ? S.players[o].name : '없음'}`;
+  if (t.t === 'special') {
+    h += `<br>통행료 ${won(rent(i))} (건물 불가)`;
+  } else {
+    h += `<table>` + [0, 1, 2, 3].map(l =>
+      `<tr${S.level[i] === l && o >= 0 ? ' style="font-weight:800"' : ''}><td>${BLD_ICON[l] || '🟫'} ${BLD_NAME[l]}</td><td>${won(rent(i, l))}</td></tr>`).join('') +
+      `</table><span class="hint">건설비 한 단계 ${won(buildCost(i))} · 같은 색 독점 시 땅 통행료 2배</span>`;
+  }
+  return h;
+}
+
+function render() {
+  if (!S) return;
+  const pickSpace = S.phase === 'space' && !busy && !cur().ai;
+  T.forEach((t, i) => {
+    const el = tileEls[i], o = S.owner[i];
+    el.classList.toggle('owned', o >= 0);
+    el.style.setProperty('--own', o >= 0 ? S.players[o].color : 'transparent');
+    el.classList.toggle('selectable', pickSpace && i !== SPACE);
+    el.classList.toggle('info-on', infoTile === i);
+    el.querySelector('.price').textContent = isProp(i) ? (o >= 0 ? '💵' + man(rent(i)) : man(t.p)) : '';
+    el.querySelector('.bld').textContent = BLD_ICON[S.level[i]];
+    el.querySelector('.tokens').innerHTML = S.players.map((p, pi) => p.alive && p.pos === i
+      ? `<span class="tok${pi === S.cur ? ' active' : ''}" style="background:${p.color}">${pi + 1}</span>` : '').join('');
+  });
+
+  // 가운데 패널
+  const p = cur();
+  $('turnInfo').innerHTML = S.phase === 'over' ? '게임 종료'
+    : `<span class="tok" style="display:inline-grid;background:${p.color}">${S.cur + 1}</span> ${p.name}${p.ai ? ' 🤖' : ''} 차례`;
+  drawDie($('d1'), S.dice[0]); drawDie($('d2'), S.dice[1]);
+  let msg = '', btns = [];
+  if (S.phase === 'over') {
+    msg = `🏆 ${S.players[S.result.ranking[0].i].name} 승리!`;
+    btns.push(['결과 보기', 'gold', () => $('overOv').classList.add('show')]);
+  } else if (busy) {
+    msg = '…';
+  } else if (p.ai) {
+    msg = '🤖 컴퓨터가 생각 중…';
+  } else if (S.phase === 'roll') {
+    if (p.island > 0) {
+      msg = `🌴 무인도에 갇혀 있습니다 (남은 ${p.island}턴). 더블이 나오면 탈출!`;
+      btns.push([p.escape > 0 ? '🎫 탈출권 쓰고 굴리기' : '🎲 탈출 시도', 'gold', actRoll]);
+    } else {
+      msg = S.dbl > 0 ? '더블! 한 번 더 굴리세요.' : '주사위를 굴리세요.';
+      btns.push(['🎲 주사위 굴리기', 'gold', actRoll]);
+    }
+  } else if (S.phase === 'space') {
+    const o = S.owner[COLUMBIA];
+    msg = '🚀 보드에서 이동할 칸을 누르세요.' + (o >= 0 && o !== S.cur ? ` (탑승료 ${won(SPACE_FEE)} → ${S.players[o].name})` : '');
+  } else if (S.phase === 'action' && S.pending) {
+    const { type, tile } = S.pending, t = T[tile];
+    if (type === 'buy') {
+      msg = `${t.e || ''} <b>${t.n}</b>을(를) <b>${won(t.p)}</b>에 살까요?<br><span class="hint">통행료 ${won(rent(tile))}${t.t === 'special' ? ' (건물 불가)' : ''}</span>`;
+      btns.push(['🏷️ 구입', 'gold', actConfirm], ['패스', 'alt', actSkip]);
+    } else {
+      const nl = S.level[tile] + 1;
+      msg = `<b>${t.n}</b>에 ${BLD_ICON[nl]} <b>${BLD_NAME[nl]}</b>을(를) <b>${won(buildCost(tile))}</b>에 지을까요?<br>` +
+        `<span class="hint">통행료 ${won(rent(tile))} → ${won(rent(tile, nl))}</span>`;
+      btns.push(['🔨 건설', 'gold', actConfirm], ['패스', 'alt', actSkip]);
+    }
+  }
+  $('msg').innerHTML = msg;
+  const act = $('actions');
+  act.innerHTML = '';
+  btns.forEach(([label, cls, fn]) => {
+    const b = document.createElement('button');
+    b.textContent = label; b.className = cls; b.onclick = fn;
+    act.appendChild(b);
+  });
+  $('tileInfo').innerHTML = infoTile >= 0 ? tileInfoHTML(infoTile) : '';
+
+  // 사이드 패널
+  $('players').innerHTML = S.players.map((q, qi) => {
+    const lands = S.owner.filter(o => o === qi).length;
+    const tags = [q.island > 0 ? `🌴${q.island}` : '', q.space ? '🚀' : '', q.pass ? `🎫우대권×${q.pass}` : '', q.escape ? `🎫탈출권×${q.escape}` : ''].filter(Boolean).join(' ');
+    return `<div class="pl${qi === S.cur && S.phase !== 'over' ? ' cur' : ''}${q.alive ? '' : ' dead'}">
+      <span class="tok" style="background:${q.color}">${qi + 1}</span>
+      <div class="info"><div class="nm">${esc(q.name)}${q.ai ? ' 🤖' : ''}</div>
+      <div class="sub">땅 ${lands}개 · 총자산 ${man(assets(qi))} ${tags}</div></div>
+      <div class="money">${man(q.money)}</div></div>`;
+  }).join('');
+  $('fund').textContent = won(S.fund);
+  $('round').textContent = S.maxRound ? `${S.round} / ${S.maxRound}` : S.round;
+  $('btnSave').disabled = busy;
+
+  if (S.phase === 'over') renderOver();
+  scheduleAI();
+}
+
+function renderLog() {
+  if (!S) return;
+  $('log').innerHTML = S.log.slice().reverse().map(l => `<div>${esc(l)}</div>`).join('');
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+let overShown = false;
+function renderOver() {
+  const r = S.result;
+  $('overTitle').textContent = `🏆 ${S.players[r.ranking[0].i].name} 승리!`;
+  $('overBody').innerHTML = `<p class="hint">${r.reason}</p>` + r.ranking.map((x, k) =>
+    `<div class="rank"><span>${['🥇', '🥈', '🥉', '4위'][k]} ${esc(S.players[x.i].name)}${x.alive ? '' : ' (파산)'}</span><b>${won(x.a)}</b></div>`).join('');
+  if (!overShown) { overShown = true; $('overOv').classList.add('show'); }
+}
+
+/* ================= 시작 화면 ================= */
+function renderSetupRows() {
+  const n = +$('pCount').value, rows = $('pRows');
+  const prev = [...rows.querySelectorAll('.setup-row')].map(r => ({ name: r.querySelector('input').value, ai: r.querySelector('select').value }));
+  rows.innerHTML = '';
+  for (let i = 0; i < n; i++) {
+    const row = document.createElement('div');
+    row.className = 'setup-row';
+    row.innerHTML = `<span class="tok" style="background:${P_COLORS[i]};font-size:14px">${i + 1}</span>
+      <input maxlength="10" value="${esc(prev[i] ? prev[i].name : DEFAULT_NAMES[i])}">
+      <select><option value="0">사람</option><option value="1">컴퓨터</option></select>`;
+    row.querySelector('select').value = prev[i] ? prev[i].ai : (i === 0 ? '0' : '1');
+    rows.appendChild(row);
+  }
+}
+function openSetup() {
+  renderSetupRows();
+  const code = lsGet('bm_code');
+  $('resumeRow').innerHTML = '';
+  if (code) {
+    const b = document.createElement('button');
+    b.className = 'gold';
+    b.innerHTML = `▶ 이어하기 <span class="code">${code}</span>`;
+    b.onclick = () => loadByCode(code);
+    $('resumeRow').appendChild(b);
+  } else {
+    $('resumeRow').innerHTML = '<span class="hint">이 기기에 저장된 게임이 없습니다.</span>';
+  }
+  $('setupMsg').textContent = '';
+  $('setup').classList.add('show');
+}
+function startFromSetup() {
+  const cfg = [...$('pRows').querySelectorAll('.setup-row')].map((r, i) => ({
+    name: r.querySelector('input').value.trim() || DEFAULT_NAMES[i],
+    ai: r.querySelector('select').value === '1',
+  }));
+  S = null;                // 새 게임은 새 저장 코드
+  newGame(cfg, +$('maxRound').value);
+  busy = false; overShown = false; infoTile = -1;
+  $('setup').classList.remove('show');
+  $('overOv').classList.remove('show');
+  $('saveInfo').textContent = '';
+  render();
+  autosave();
+}
+
+$('pCount').onchange = renderSetupRows;
+$('btnStart').onclick = startFromSetup;
+$('btnLoad').onclick = () => loadByCode($('codeInput').value);
+$('btnSave').onclick = () => { if (!busy) autosave(); };
+$('btnNew').onclick = () => { if (!busy) { overShown = false; $('overOv').classList.remove('show'); openSetup(); } };
+$('btnAgain').onclick = () => { $('overOv').classList.remove('show'); openSetup(); };
+$('btnView').onclick = () => $('overOv').classList.remove('show');
+document.addEventListener('keydown', e => {
+  if (e.key === ' ' && S && S.phase === 'roll' && !cur().ai && !document.querySelector('.overlay.show')) { e.preventDefault(); actRoll(); }
+});
+
+buildBoard();
+drawDie($('d1'), 1); drawDie($('d2'), 1);
+openSetup();
+</script>
+</body>
+</html>
