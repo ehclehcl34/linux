@@ -393,7 +393,7 @@ const T = [
   { n: '황금열쇠', t: 'key', e: '🔑' },
   { n: '상파울루', t: 'city', g: 5, p: 240000 },
   { n: '시드니', t: 'city', g: 5, p: 240000 },
-  { n: '부산', t: 'special', p: 500000, e: '⚓' },
+  { n: '부산', t: 'special', p: 500000, r: 500000, e: '⚓' },
   { n: '하와이', t: 'city', g: 6, p: 260000 },
   { n: '리스본', t: 'city', g: 6, p: 260000 },
   { n: '퀸 엘리자베스호', t: 'special', p: 300000, e: '🚢' },
@@ -522,7 +522,7 @@ function ownsGroup(pi, g) { return T.every((t, i) => t.g !== g || S.owner[i] ===
 function buildCost(i) { return Math.round(T[i].p * 0.5 / 1000) * 1000; }
 function rent(i, level = S.level[i]) {
   const t = T[i];
-  if (t.r) return t.r;   // 통행료가 따로 정해진 곳 (서울)
+  if (t.r) return t.r;   // 통행료가 따로 정해진 곳 (서울·부산)
   if (t.t === 'special') return Math.round(t.p * 0.3 / 1000) * 1000;
   let r = t.p * RENT_MUL[level];
   if (level === 0 && S.owner[i] >= 0 && ownsGroup(S.owner[i], t.g)) r *= 2;
