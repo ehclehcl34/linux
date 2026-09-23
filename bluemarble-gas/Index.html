@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>부루마블</title>
+<style>
+  :root {
+    --line: #23352b;
+    --tile: #fffdf5;
+    --ink: #1d241f;
+    --muted: #66706a;
+    --gold: #f2b705;
+    --panel: #fffdf5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, sans-serif;
+    background: radial-gradient(circle at 50% 30%, #1b6a50, #0a2a20);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+  button {
+    font: inherit; cursor: pointer; border: 0; border-radius: 8px;
+    padding: .55em 1em; background: #2e7d5b; color: #fff; font-weight: 700;
+    box-shadow: 0 2px 0 rgba(0,0,0,.25);
+  }
+  button:hover { filter: brightness(1.1); }
+  button:disabled { opacity: .45; cursor: default; filter: none; }
+  button.alt { background: #8a948e; }
+  button.gold { background: var(--gold); color: #3a2c00; }
+  input, select { font: inherit; padding: .4em .5em; border: 1px solid #b9c2bc; border-radius: 6px; background: #fff; }
+
+  #app { display: flex; gap: 14px; padding: 12px; justify-content: center; align-items: flex-start; flex-wrap: wrap; }
+
+  /* ---------- 보드 ---------- */
+  #board {
+    --size: min(96vw, 94vh, 860px);
+    width: var(--size); height: var(--size);
+    display: grid;
+    grid-template-columns: 1.5fr repeat(9, 1fr) 1.5fr;
+    grid-template-rows: 1.5fr repeat(9, 1fr) 1.5fr;
+    gap: 2px; background: var(--line); border: 3px solid var(--line); border-radius: 10px;
+    font-size: max(7px, calc(var(--size) / 72));
+    box-shadow: 0 10px 30px rgba(0,0,0,.4);
+    flex: none;
+  }
+  .tile {
+    --own: transparent;
+    position: relative; background: var(--tile); overflow: hidden;
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    line-height: 1.1; cursor: pointer; border-radius: 2px;
+  }
+  .tile.owned { background: color-mix(in srgb, var(--own) 20%, var(--tile)); box-shadow: inset 0 0 0 .25em var(--own); }
+  .tile .band { width: 100%; height: 20%; flex: none; }
+  .tile .name { font-weight: 700; padding: .15em .1em 0; word-break: keep-all; overflow-wrap: anywhere; }
+  .tile .emo { font-size: 1.6em; line-height: 1.2; }
+  .tile .price { color: var(--muted); font-size: .9em; }
+  .tile .bld { font-size: 1.2em; line-height: 1; }
+  .tile.land { animation: land .9s ease; }
+  @keyframes land { 0% { background: #fff3a0; } 100% { } }
+  .tile .bld.pop { animation: bldpop .6s cubic-bezier(.3,1.8,.5,1); }
+  @keyframes bldpop { 0% { transform: scale(0) translateY(1em); } 100% { transform: none; } }
+  .tile.corner .emo { font-size: 2.4em; }
+  .tile.corner .name { font-size: 1.1em; }
+  .tile.selectable { animation: pulse 1s infinite; }
+  .tile.info-on { outline: .2em solid var(--gold); outline-offset: -.2em; }
+  @keyframes pulse { 50% { background: #fff1b8; } }
+  .tok {
+    width: 1.5em; height: 1.5em; border-radius: 50%; border: .12em solid #fff;
+    color: #fff; font-size: .95em; font-weight: 800; display: grid; place-items: center;
+    box-shadow: 0 1px 2px rgba(0,0,0,.5);
+  }
+  .tok.active { transform: scale(1.25); z-index: 2; box-shadow: 0 0 0 .15em var(--gold); }
+
+  #center {
+    grid-area: 2 / 2 / 11 / 11;
+    background: linear-gradient(160deg, #e7f4ea, #cfe7d6);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: .8em; padding: 1em; text-align: center; overflow: auto; font-size: 1.25em;
+  }
+  .logo { font-size: 2.2em; font-weight: 900; letter-spacing: .05em; color: #1a5a8a; text-shadow: 2px 2px 0 #fff; }
+  .logo small { display: block; font-size: .35em; color: var(--muted); letter-spacing: .3em; }
+  #turnInfo { font-weight: 800; font-size: 1.1em; }
+  #dice { display: flex; gap: .8em; }
+  #dice { position: relative; gap: 3.2em; padding: .4em 0 .8em; }
+  .die { --d: 3.6em; width: var(--d); height: var(--d); perspective: 30em; position: relative; }
+  .die::after { /* 바닥 그림자 */
+    content: ''; position: absolute; left: 8%; right: 8%; bottom: -.7em; height: .6em;
+    background: radial-gradient(rgba(0,0,0,.35), transparent 70%); border-radius: 50%;
+  }
+  .cube { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform 1.25s cubic-bezier(.15,.85,.35,1); }
+  .face {
+    position: absolute; inset: 0; background: linear-gradient(145deg, #ffffff, #e9e6de); border-radius: .5em;
+    display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); padding: .38em;
+    box-shadow: inset 0 0 .5em rgba(0,0,0,.18); border: 1px solid #d8d3c6;
+  }
+  .face i { border-radius: 50%; margin: 14%; }
+  .face i.on { background: radial-gradient(circle at 35% 35%, #555, #111); }
+  .face.f1 i.on { background: radial-gradient(circle at 35% 35%, #ff6b6b, #c1121f); margin: 0; }
+  .f1 { transform: translateZ(calc(var(--d) / 2)); }
+  .f6 { transform: rotateY(180deg) translateZ(calc(var(--d) / 2)); }
+  .f2 { transform: rotateY(90deg) translateZ(calc(var(--d) / 2)); }
+  .f5 { transform: rotateY(-90deg) translateZ(calc(var(--d) / 2)); }
+  .f3 { transform: rotateX(90deg) translateZ(calc(var(--d) / 2)); }
+  .f4 { transform: rotateX(-90deg) translateZ(calc(var(--d) / 2)); }
+  .die.toss { animation: toss 1.25s cubic-bezier(.3,.7,.4,1); }
+  @keyframes toss {
+    0% { transform: translate(-6em, -5em) scale(.6); }
+    35% { transform: translate(-1em, -2.2em) scale(1.15); }
+    55% { transform: translate(.3em, 0) scale(1); }
+    70% { transform: translate(.1em, -.7em); }
+    85% { transform: translate(0, 0); }
+    92% { transform: translate(0, -.2em); }
+    100% { transform: none; }
+  }
+  .die + .die.toss { animation-delay: .06s; }
+  #diceSum {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(0);
+    background: var(--gold); color: #3a2c00; font-weight: 900; font-size: 1.3em; border-radius: 1em;
+    padding: .1em .6em; white-space: nowrap; box-shadow: 0 3px 8px rgba(0,0,0,.3); pointer-events: none; z-index: 3;
+  }
+  #diceSum.show { animation: sumpop 1.5s ease forwards; }
+  @keyframes sumpop { 0% { transform: translate(-50%, -50%) scale(0); } 20% { transform: translate(-50%, -50%) scale(1.25); } 30%, 80% { transform: translate(-50%, -50%) scale(1); opacity: 1; } 100% { transform: translate(-50%, -160%) scale(1); opacity: 0; } }
+
+  /* ---------- 장기말 ---------- */
+  #board { position: relative; }
+  #pieces { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+  .piece { position: absolute; width: 2.4em; height: 2.4em; margin: -1.2em 0 0 -1.2em; transition: left .25s ease, top .25s ease; }
+  .piece.fly { transition: left .7s cubic-bezier(.4,0,.2,1), top .7s cubic-bezier(.4,0,.2,1); }
+  .piece .body {
+    width: 100%; height: 100%; border-radius: 50%; display: grid; place-items: center; font-size: 1.45em; line-height: 1;
+    background: radial-gradient(circle at 32% 28%, rgba(255,255,255,.75), transparent 42%), var(--c);
+    border: .12em solid #fff; box-shadow: 0 .3em 0 color-mix(in srgb, var(--c) 60%, #000), 0 .45em .6em rgba(0,0,0,.45);
+  }
+  .piece .tag {
+    position: absolute; top: -1.45em; left: 50%; transform: translateX(-50%); white-space: nowrap;
+    background: var(--c); color: #fff; font-size: .72em; font-weight: 800; padding: .05em .45em; border-radius: .7em;
+    border: .1em solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.4); opacity: .9;
+  }
+  .piece.active { z-index: 2; }
+  .piece.active .body { animation: bob 1.1s ease-in-out infinite; outline: .18em solid var(--gold); outline-offset: .08em; }
+  .piece.active .tag { opacity: 1; font-size: .85em; background: var(--gold); color: #3a2c00; }
+  .piece.hop .body { animation: hop .25s ease-out; }
+  .piece.fly .body { animation: flyhop .7s ease-in-out; }
+  @keyframes hop { 45% { transform: translateY(-1.1em) scale(1.08, .95); } 80% { transform: scale(1.1, .88); } }
+  @keyframes flyhop { 50% { transform: translateY(-2.5em) scale(1.3); } }
+  @keyframes bob { 50% { transform: translateY(-.3em); } }
+  @media (max-width: 600px) { .piece:not(.active) .tag { display: none; } }
+  .float {
+    position: absolute; transform: translate(-50%, -50%); font-weight: 900; font-size: 1.25em; white-space: nowrap;
+    text-shadow: 0 0 .2em #fff, 0 0 .2em #fff, 0 0 .3em #fff; animation: floatup 1.8s ease-out forwards; z-index: 7;
+  }
+  .float.plus { color: #1b8a3a; } .float.minus { color: #d32f2f; }
+  @keyframes floatup { 0% { opacity: 0; margin-top: 0; } 15% { opacity: 1; } 100% { opacity: 0; margin-top: -3em; } }
+  #turnInfo.pop { animation: turnpop .7s cubic-bezier(.3,1.6,.5,1); }
+  @keyframes turnpop { 0% { transform: scale(.3); opacity: 0; } 100% { transform: none; opacity: 1; } }
+  #msg.pop, #actions.pop { animation: fadein .35s ease; }
+  @keyframes fadein { from { opacity: 0; transform: translateY(.4em); } }
+  .keycard.flip { animation: cardflip .6s ease; }
+  @keyframes cardflip { 0% { transform: rotateY(90deg) scale(.6); } 100% { transform: none; } }
+  .pl .money.up { animation: flashg 1s; } .pl .money.down { animation: flashr 1s; }
+  @keyframes flashg { 30% { color: #1b8a3a; transform: scale(1.15); } }
+  @keyframes flashr { 30% { color: #d32f2f; transform: scale(1.15); } }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 17px; flex: none; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+  select.av { font-size: 18px; padding: .15em .2em; }
+  #msg { min-height: 2.6em; font-weight: 600; }
+  #actions { display: flex; gap: .6em; flex-wrap: wrap; justify-content: center; min-height: 2.6em; }
+  #tileInfo { font-size: .85em; background: #fff; border-radius: 8px; padding: .5em .8em; max-width: 90%; }
+  #tileInfo:empty { display: none; }
+  #tileInfo table { border-collapse: collapse; margin: .3em auto 0; }
+  #tileInfo td { padding: .05em .6em; }
+
+  /* ---------- 사이드 패널 ---------- */
+  #side { width: min(96vw, 340px); display: flex; flex-direction: column; gap: 10px; }
+  .card { background: var(--panel); border-radius: 10px; padding: 10px 12px; box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+  .pl { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-bottom: 1px solid #e3e7e4; }
+  .pl:last-child { border-bottom: 0; }
+  .pl.cur { background: #fff4c7; border-radius: 6px; }
+  .pl.dead { opacity: .4; text-decoration: line-through; }
+  .pl .tok { font-size: 14px; flex: none; }
+  .pl .info { flex: 1; min-width: 0; }
+  .pl .nm { font-weight: 800; }
+  .pl .sub { font-size: 12px; color: var(--muted); }
+  .pl .money { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #log { max-height: 260px; overflow: auto; font-size: 13px; line-height: 1.5; }
+  #log div { border-bottom: 1px dashed #e3e7e4; padding: 2px 0; }
+  .code { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 800; letter-spacing: .15em; background: #eef3ef; padding: 1px 6px; border-radius: 4px; }
+  h3 { margin: 0 0 6px; font-size: 15px; }
+
+  /* ---------- 오버레이 ---------- */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none;
+    align-items: center; justify-content: center; padding: 16px; z-index: 10;
+  }
+  .overlay.show { display: flex; }
+  .modal { background: var(--panel); border-radius: 14px; padding: 20px; width: min(100%, 440px); max-height: 92vh; overflow: auto; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+  .modal h2 { margin: 0 0 12px; }
+  .setup-row { display: flex; gap: 8px; margin: 6px 0; align-items: center; }
+  .setup-row input { flex: 1; min-width: 0; }
+  .keycard { background: linear-gradient(145deg, #ffe27a, #f2b705); text-align: center; width: min(100%, 320px); cursor: pointer; }
+  .keycard .k-emo { font-size: 48px; }
+  .keycard h2 { margin: 6px 0; }
+  .keycard p { font-size: 17px; margin: 8px 0 14px; }
+  .rank { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #e3e7e4; }
+  .hint { font-size: 12px; color: var(--muted); }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .tabs button { flex: 1; background: #dfe6e1; color: var(--ink); box-shadow: none; }
+  .tabs button.on { background: #2e7d5b; color: #fff; }
+  .code.big { font-size: 26px; padding: 2px 10px; }
+  .me { font-size: 11px; background: var(--gold); color: #3a2c00; border-radius: 4px; padding: 0 4px; margin-left: 4px; vertical-align: middle; }
+  .lobby-seat { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #e3e7e4; }
+  .lobby-seat .grow { flex: 1; font-weight: 700; }
+  .lobby-seat button { padding: .2em .6em; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="board">
+    <div id="center">
+      <div class="logo">부루마블<small>BLUE MARBLE</small></div>
+      <div id="turnInfo"></div>
+      <div id="dice"><div class="die" id="d1"></div><div class="die" id="d2"></div><div id="diceSum"></div></div>
+      <div id="msg"></div>
+      <div id="actions"></div>
+      <div id="tileInfo"></div>
+    </div>
+    <div id="pieces"></div>
+  </div>
+
+  <aside id="side">
+    <div class="card">
+      <h3>플레이어</h3>
+      <div id="players"></div>
+    </div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <span>🏦 사회복지기금 <b id="fund">0원</b></span>
+        <span>라운드 <b id="round">1</b></span>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="btnSave" class="alt">💾 저장</button>
+        <button id="btnNew" class="alt">🆕 새 게임</button>
+        <span id="saveInfo" class="hint"></span>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label>⏱️ 게임 속도 <select id="tempo">
+          <option value="1.6">느리게</option><option value="1" selected>보통</option><option value="0.55">빠르게</option>
+        </select></label>
+        <button id="btnSound" class="alt" title="효과음 켜기/끄기">🔊 소리</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>기록</h3>
+      <div id="log"></div>
+    </div>
+  </aside>
+</div>
+
+<!-- 시작 화면 -->
+<div id="setup" class="overlay show">
+  <div class="modal">
+    <h2>🎲 부루마블</h2>
+    <div class="tabs">
+      <button id="tabBtnLocal" class="on">🖥️ 한 PC에서 같이</button>
+      <button id="tabBtnOnline">🌐 각자 PC에서 (온라인)</button>
+    </div>
+
+    <div id="tabLocal">
+    <div class="row">
+      <label>인원 <select id="pCount">
+        <option value="2">2명</option><option value="3">3명</option><option value="4" selected>4명</option>
+      </select></label>
+      <label>라운드 제한 <select id="maxRound">
+        <option value="0">무제한</option><option value="15">15</option><option value="25" selected>25</option><option value="40">40</option>
+      </select></label>
+    </div>
+    <div id="pRows"></div>
+    <p class="hint">캐릭터와 닉네임을 정하세요. 라운드 제한에 도달하면 총자산(현금+땅+건물)이 가장 많은 사람이 승리합니다. 혼자라면 나머지를 컴퓨터로 두세요.</p>
+    <div class="row"><button id="btnStart" class="gold">게임 시작</button></div>
+    <hr style="border:0;border-top:1px solid #e3e7e4;margin:16px 0">
+    <h3>이어하기</h3>
+    <div class="row" id="resumeRow"></div>
+    <div class="row" style="margin-top:8px">
+      <input id="codeInput" placeholder="저장 코드 6자리" maxlength="6" style="width:9em;text-transform:uppercase">
+      <button id="btnLoad" class="alt">불러오기</button>
+    </div>
+    <div id="setupMsg" class="hint" style="margin-top:6px"></div>
+    </div>
+
+    <div id="tabOnline" hidden>
+      <div id="onlineStart">
+        <div class="setup-row"><label style="flex:none">내 캐릭터</label><select id="myAvatar" class="av"></select>
+          <input id="myName" maxlength="10" placeholder="닉네임 (최대 10자)"></div>
+        <div class="row" style="margin-top:10px"><button id="btnCreate" class="gold">🏠 방 만들기</button></div>
+        <div class="row" style="margin-top:10px">
+          <input id="roomInput" placeholder="방 코드 5자리" maxlength="5" style="width:9em;text-transform:uppercase">
+          <button id="btnJoin">🚪 참가하기</button>
+        </div>
+        <p class="hint">방장이 방을 만들고 코드를 알려 주면, 친구들은 각자 PC에서 같은 주소로 들어와 코드를 입력합니다.</p>
+      </div>
+      <div id="lobby" hidden>
+        <div class="row">방 코드 <span class="code big" id="roomCode"></span></div>
+        <div class="row" style="margin-top:6px">
+          <input id="roomLink" readonly style="flex:1;min-width:0;font-size:12px">
+          <button id="btnCopy" class="alt">복사</button>
+        </div>
+        <p class="hint">친구에게 방 코드나 링크를 보내 주세요. (최대 4명)</p>
+        <div id="lobbyList"></div>
+        <div id="hostCtl" class="row" style="margin-top:10px">
+          <button id="btnBot" class="alt">🤖 컴퓨터 추가</button>
+          <label>라운드 <select id="netRound">
+            <option value="0">무제한</option><option value="15">15</option><option value="25" selected>25</option><option value="40">40</option>
+          </select></label>
+          <button id="btnNetStart" class="gold">게임 시작</button>
+        </div>
+        <p id="guestWait" class="hint">방장이 게임을 시작하기를 기다리는 중…</p>
+        <div class="row"><button id="btnLeave" class="alt">나가기</button></div>
+      </div>
+      <div id="onlineMsg" class="hint" style="margin-top:8px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 황금열쇠 카드 -->
+<div id="cardOv" class="overlay">
+  <div class="modal keycard" id="keycard">
+    <div class="k-emo">🔑</div>
+    <div class="hint">황금열쇠</div>
+    <h2 id="cardTitle"></h2>
+    <p id="cardDesc"></p>
+    <button class="alt" id="cardOk">확인</button>
+  </div>
+</div>
+
+<!-- 게임 종료 -->
+<div id="overOv" class="overlay">
+  <div class="modal">
+    <h2 id="overTitle">🏆 게임 종료</h2>
+    <div id="overBody"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="gold" id="btnAgain">새 게임</button>
+      <button class="alt" id="btnView">보드 보기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= 설정 ================= */
+const START_MONEY = 3000000;   // 시작 자금
+const SALARY = 200000;         // 출발지 통과 월급
+const FUND_PAY = 150000;       // 사회복지기금 납부액
+const SPACE_FEE = 200000;      // 우주여행 탑승료 (컬럼비아호 주인에게)
+const ISLAND_TURNS = 3;        // 무인도 대기 턴
+const RENT_MUL = [0.2, 1, 2.5, 5];   // 땅/별장/빌딩/호텔 통행료 배수(땅값 기준)
+const BLD_ICON = ['', '🏠', '🏢', '🏨'];
+const BLD_NAME = ['땅', '별장', '빌딩', '호텔'];
+const P_COLORS = ['#e53935', '#1e88e5', '#43a047', '#fb8c00'];
+const GROUP_COLORS = { 1: '#9ccc65', 2: '#26c6da', 3: '#ab47bc', 4: '#ff7043', 5: '#ffca28', 6: '#42a5f5', 7: '#ec407a', 8: '#5c6bc0' };
+const DEFAULT_NAMES = ['빨강', '파랑', '초록', '주황'];
+const AVATARS = ['🐶', '🐱', '🦊', '🐼', '🐯', '🐸', '🐵', '🐧', '🦁', '🐰', '🐻', '🐨', '🐷', '🐤', '🦄', '🐲', '👻', '🤖', '👽', '🎃'];
+const STEP_MS = 300;       // 한 칸 이동 시간 (보통 속도 기준)
+const avatarOf = (p, i) => p.avatar || AVATARS[i % AVATARS.length];
+
+const T = [
+  { n: '출발', t: 'start', e: '🏁' },
+  { n: '타이베이', t: 'city', g: 1, p: 50000 },
+  { n: '황금열쇠', t: 'key', e: '🔑' },
+  { n: '베이징', t: 'city', g: 1, p: 80000 },
+  { n: '마닐라', t: 'city', g: 1, p: 80000 },
+  { n: '제주도', t: 'special', p: 200000, e: '🍊' },
+  { n: '싱가포르', t: 'city', g: 2, p: 100000 },
+  { n: '황금열쇠', t: 'key', e: '🔑' },
+  { n: '카이로', t: 'city', g: 2, p: 100000 },
+  { n: '이스탄불', t: 'city', g: 2, p: 120000 },
+  { n: '무인도', t: 'island', e: '🌴' },
+  { n: '아테네', t: 'city', g: 3, p: 140000 },
+  { n: '황금열쇠', t: 'key', e: '🔑' },
+  { n: '코펜하겐', t: 'city', g: 3, p: 160000 },
+  { n: '스톡홀름', t: 'city', g: 3, p: 160000 },
+  { n: '콩코드 여객기', t: 'special', p: 200000, e: '✈️' },
+  { n: '베른', t: 'city', g: 4, p: 180000 },
+  { n: '황금열쇠', t: 'key', e: '🔑' },
+  { n: '베를린', t: 'city', g: 4, p: 180000 },
+  { n: '오타와', t: 'city', g: 4, p: 200000 },
+  { n: '사회복지기금 수령', t: 'fundOut', e: '💰' },
+  { n: '부에노스 아이레스', t: 'city', g: 5, p: 220000 },
+  { n: '황금열쇠', t: 'key', e: '🔑' },
+  { n: '상파울루', t: 'city', g: 5, p: 240000 },
+  { n: '시드니', t: 'city', g: 5, p: 240000 },
+  { n: '부산', t: 'special', p: 500000, r: 500000, e: '⚓' },
+  { n: '하와이', t: 'city', g: 6, p: 260000 },
+  { n: '리스본', t: 'city', g: 6, p: 260000 },
+  { n: '퀸 엘리자베스호', t: 'special', p: 300000, e: '🚢' },
+  { n: '마드리드', t: 'city', g: 6, p: 280000 },
+  { n: '우주여행', t: 'space', e: '🚀' },
+  { n: '도쿄', t: 'city', g: 7, p: 300000 },
+  { n: '컬럼비아호', t: 'special', p: 450000, e: '🛰️' },
+  { n: '파리', t: 'city', g: 7, p: 320000 },
+  { n: '로마', t: 'city', g: 7, p: 320000 },
+  { n: '황금열쇠', t: 'key', e: '🔑' },
+  { n: '런던', t: 'city', g: 8, p: 350000 },
+  { n: '뉴욕', t: 'city', g: 8, p: 350000 },
+  { n: '사회복지기금 접수', t: 'fundIn', e: '🏦' },
+  { n: '서울', t: 'special', p: 1000000, r: 1000000, e: '🏯' },
+];
+const ISLAND = 10, SPACE = 30, COLUMBIA = 32;
+
+const KEYS = [
+  { n: '복권 당첨', d: '축하합니다! 당첨금 20만원을 받습니다.', f: p => gain(p, 200000) },
+  { n: '노벨 평화상', d: '상금 30만원을 받습니다.', f: p => gain(p, 300000) },
+  { n: '장학금', d: '장학금 10만원을 받습니다.', f: p => gain(p, 100000) },
+  { n: '연금 혜택', d: '연금 5만원을 받습니다.', f: p => gain(p, 50000) },
+  { n: '과속 운전', d: '벌금 5만원을 냅니다.', f: p => pay(idx(p), 50000, null) },
+  { n: '해외 유학', d: '학비 10만원을 냅니다.', f: p => pay(idx(p), 100000, null) },
+  { n: '병원비', d: '병원비 5만원을 냅니다.', f: p => pay(idx(p), 50000, null) },
+  { n: '건물 수리비', d: '가진 건물 한 단계당 3만원을 냅니다.', f: p => {
+      const n = S.owner.reduce((s, o, i) => s + (o === idx(p) ? S.level[i] : 0), 0);
+      if (n) pay(idx(p), n * 30000, null); else log('수리할 건물이 없습니다. 휴~');
+    } },
+  { n: '생일 축하', d: '모든 플레이어에게서 1만원씩 축하금을 받습니다.', f: p => {
+      S.players.forEach((q, qi) => { if (q !== p && q.alive) pay(qi, 10000, idx(p)); });
+    } },
+  { n: '한턱 쏘기', d: '모든 플레이어에게 1만원씩 줍니다.', f: p => {
+      S.players.forEach((q, qi) => { if (q !== p && q.alive && p.alive) pay(idx(p), 10000, qi); });
+    } },
+  { n: '무인도 표류', d: '폭풍을 만나 무인도로 떠내려갑니다.', f: p => sendIsland(p) },
+  { n: '고속도로', d: '출발지로 바로 이동하고 월급을 받습니다.', f: async p => { await moveTo(p, 0, true); } },
+  { n: '우주여행 초대장', d: '우주여행 칸으로 이동합니다.', f: async p => { await moveTo(p, SPACE, true); await land(p); } },
+  { n: '뒤로 이동', d: '뒤로 두 칸 이동합니다.', f: async p => { await stepMove(p, -2); await land(p); } },
+  { n: '서울 올림픽', d: '올림픽을 보러 서울로 이동합니다.', f: async p => { await moveTo(p, 39, true); await land(p); } },
+  { n: '부산 관광', d: '부산으로 여행을 떠납니다.', f: async p => { await moveTo(p, 25, true); await land(p); } },
+  { n: '제주도 관광', d: '제주도로 여행을 떠납니다.', f: async p => { await moveTo(p, 5, true); await land(p); } },
+  { n: '우대권', d: '다음에 내야 할 통행료 1회가 면제됩니다.', f: p => { p.pass++; } },
+  { n: '무인도 탈출권', d: '무인도에 갇히면 바로 탈출할 수 있습니다.', f: p => { p.escape++; } },
+];
+
+/* ================= 상태 ================= */
+let S = null;          // 게임 상태 (저장 대상)
+let busy = false;      // 애니메이션/처리 중
+let SPEED = 1;         // 애니메이션 배속 (테스트용, 작을수록 빠름)
+let TEMPO = 1;         // 사용자가 고르는 게임 속도 (느리게 1.6 / 보통 1 / 빠르게 0.55)
+let infoTile = -1;
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms * SPEED * TEMPO));
+const cur = () => S.players[S.cur];
+const idx = p => S.players.indexOf(p);
+const won = v => v.toLocaleString('ko-KR') + '원';
+const man = v => (v >= 10000 ? (v / 10000).toLocaleString('ko-KR') + '만' : v.toLocaleString('ko-KR'));
+const rnd6 = () => 1 + Math.floor(Math.random() * 6);
+const isProp = i => T[i].t === 'city' || T[i].t === 'special';
+/* ---------- 효과음 (Web Audio로 직접 합성) ---------- */
+const SFX = {
+  ctx: null, on: true,
+  init() {
+    if (!this.ctx) { try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; } }
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+  },
+  tone(freq, dur, type = 'sine', vol = 0.12, when = 0, slide = 0) {
+    const c = this.ctx, t = c.currentTime + when;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t + dur + 0.02);
+  },
+  play(name) {
+    if (!this.on || !this.ctx || this.ctx.state !== 'running' || SPEED < 0.2) return;
+    const T0 = this;
+    ({
+      roll() { for (let k = 0; k < 9; k++) T0.tone(180 + Math.random() * 260, 0.05, 'triangle', 0.14, k * 0.09 + Math.random() * 0.03); },
+      step() { T0.tone(520, 0.07, 'square', 0.035, 0, 780); },
+      coin() { T0.tone(988, 0.09, 'square', 0.05); T0.tone(1319, 0.22, 'square', 0.05, 0.08); },
+      pay() { T0.tone(392, 0.16, 'sawtooth', 0.05); T0.tone(262, 0.26, 'sawtooth', 0.05, 0.12); },
+      buy() { [523, 659, 784].forEach((f, k) => T0.tone(f, 0.14, 'triangle', 0.1, k * 0.07)); },
+      build() { [392, 523, 659, 1047].forEach((f, k) => T0.tone(f, 0.12, 'square', 0.05, k * 0.06)); },
+      card() { [784, 988, 1175, 1568].forEach((f, k) => T0.tone(f, 0.25, 'sine', 0.09, k * 0.08)); },
+      double() { [659, 880, 1109].forEach((f, k) => T0.tone(f, 0.12, 'triangle', 0.1, k * 0.06)); },
+      turn() { T0.tone(660, 0.12, 'sine', 0.08); T0.tone(880, 0.2, 'sine', 0.08, 0.1); },
+      island() { T0.tone(440, 0.5, 'sine', 0.08, 0, 220); },
+      space() { T0.tone(200, 0.8, 'sawtooth', 0.05, 0, 1600); },
+      win() { [523, 659, 784, 1047, 784, 1047].forEach((f, k) => T0.tone(f, 0.2, 'triangle', 0.1, k * 0.13)); },
+    })[name]();
+  },
+};
+document.addEventListener('pointerdown', () => SFX.init());
+
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+function newGame(cfg, maxRound) {
+  S = {
+    players: cfg.map((c, i) => ({
+      name: c.name, ai: c.ai, cid: c.cid || null, avatar: c.avatar || AVATARS[i], color: P_COLORS[i], money: START_MONEY, pos: 0,
+      alive: true, island: 0, space: false, pass: 0, escape: 0,
+    })),
+    owner: Array(40).fill(-1), level: Array(40).fill(0),
+    cur: 0, round: 1, maxRound, fund: 0, dbl: 0, extra: false,
+    phase: 'roll', pending: null, dice: [1, 1], rollSeq: 0, card: null, online: !!NET,
+    deck: shuffle(KEYS.map((_, i) => i)), deckPos: 0,
+    log: [], code: S && S.code || null, result: null,
+  };
+  resetView();
+  log('게임 시작! 모두 ' + won(START_MONEY) + '을 받았습니다.');
+}
+
+function log(text) {
+  if (!S) return;
+  S.log.push(text);
+  if (S.log.length > 150) S.log.splice(0, S.log.length - 150);
+  renderLog();
+}
+
+/* ================= 규칙 계산 ================= */
+function ownsGroup(pi, g) { return T.every((t, i) => t.g !== g || S.owner[i] === pi); }
+function buildCost(i) { return Math.round(T[i].p * 0.5 / 1000) * 1000; }
+function rent(i, level = S.level[i]) {
+  const t = T[i];
+  if (t.r) return t.r;   // 통행료가 따로 정해진 곳 (서울·부산)
+  if (t.t === 'special') return Math.round(t.p * 0.3 / 1000) * 1000;
+  let r = t.p * RENT_MUL[level];
+  if (level === 0 && S.owner[i] >= 0 && ownsGroup(S.owner[i], t.g)) r *= 2;
+  return Math.round(r / 1000) * 1000;
+}
+function canBuild(i) { return T[i].t === 'city' && S.level[i] < 3 && cur().money >= buildCost(i); }
+function assets(pi) {
+  const p = S.players[pi];
+  if (!p.alive) return 0;
+  return S.owner.reduce((s, o, i) => o === pi ? s + T[i].p + S.level[i] * buildCost(i) : s, p.money);
+}
+
+function gain(p, amt) { p.money += amt; }
+function credit(to, amt) {
+  if (typeof to === 'number') S.players[to].money += amt;
+  else if (to === 'fund') S.fund += amt;
+}
+/** fi 플레이어가 amt를 to(플레이어 번호 / 'fund' / null=은행)에게 지불. 모자라면 자산 매각, 그래도 모자라면 파산. */
+function pay(fi, amt, to) {
+  const p = S.players[fi];
+  if (!p.alive) return;
+  if (p.money < amt) liquidate(fi, amt);
+  if (p.money >= amt) { p.money -= amt; credit(to, amt); return; }
+  credit(to, p.money);
+  p.money = 0;
+  bankrupt(fi);
+}
+function liquidate(fi, need) {
+  const p = S.players[fi], sold = [];
+  const mine = () => S.owner.map((o, i) => o === fi ? i : -1).filter(i => i >= 0);
+  while (p.money < need) {
+    const b = mine().filter(i => S.level[i] > 0).sort((a, c) => buildCost(a) - buildCost(c))[0];
+    if (b !== undefined) {
+      sold.push(T[b].n + ' ' + BLD_NAME[S.level[b]]);
+      S.level[b]--; p.money += Math.floor(buildCost(b) / 2);
+      continue;
+    }
+    const l = mine().sort((a, c) => T[a].p - T[c].p)[0];
+    if (l === undefined) break;
+    sold.push(T[l].n);
+    S.owner[l] = -1; p.money += Math.floor(T[l].p / 2);
+  }
+  if (sold.length) log(`💸 ${p.name}: 자금 부족으로 반값 매각 — ${sold.join(', ')}`);
+}
+function bankrupt(fi) {
+  const p = S.players[fi];
+  p.alive = false; p.space = false; p.island = 0;
+  S.owner.forEach((o, i) => { if (o === fi) { S.owner[i] = -1; S.level[i] = 0; } });
+  if (fi === S.cur) { S.extra = false; S.pending = null; }
+  log(`☠️ ${p.name} 파산!`);
+}
+function sendIsland(p) {
+  p.pos = ISLAND; p.island = ISLAND_TURNS; p.space = false;
+  if (p === cur()) S.extra = false;
+  log(`🌴 ${p.name}: 무인도에 갇혔습니다 (${ISLAND_TURNS}턴)`);
+  render();
+}
+
+/* ================= 이동 ================= */
+async function stepMove(p, steps, fast) {
+  const dir = steps > 0 ? 1 : -1;
+  for (let k = 0; k < Math.abs(steps); k++) {
+    p.pos = (p.pos + dir + 40) % 40;
+    if (dir > 0 && p.pos === 0) { p.money += SALARY; log(`🏁 ${p.name}: 출발지 통과! 월급 ${won(SALARY)}`); }
+    SFX.play('step');
+    render();
+    await sleep(fast ? 90 : STEP_MS);
+  }
+  flashTile(p.pos);
+  await sleep(fast ? 200 : 250);
+}
+function flashTile(i) {
+  const el = tileEls[i];
+  el.classList.remove('land'); void el.offsetWidth; el.classList.add('land');
+}
+async function moveTo(p, target, fast) { await stepMove(p, (target - p.pos + 40) % 40, fast); }
+
+async function land(p) {
+  if (!p.alive) return;
+  const i = p.pos, t = T[i], me = idx(p);
+  if (isProp(i)) {
+    const o = S.owner[i];
+    if (o < 0) {
+      if (p.money >= t.p) S.pending = { type: 'buy', tile: i };
+      else log(`${t.n}: 돈이 부족해 살 수 없습니다.`);
+    } else if (o === me) {
+      if (canBuild(i)) S.pending = { type: 'build', tile: i };
+    } else {
+      const r = rent(i);
+      if (p.pass > 0) { p.pass--; log(`🎫 ${p.name}: 우대권 사용 — ${t.n} 통행료 면제`); }
+      else { log(`💵 ${p.name} → ${S.players[o].name}: ${t.n} 통행료 ${won(r)}`); pay(me, r, o); }
+    }
+  } else if (t.t === 'key') {
+    await drawKey(p);
+  } else if (t.t === 'island') {
+    SFX.play('island');
+    p.island = ISLAND_TURNS; S.extra = false;
+    log(`🌴 ${p.name}: 무인도 도착! ${ISLAND_TURNS}턴 동안 갇힙니다.`);
+  } else if (t.t === 'fundIn') {
+    log(`🏦 ${p.name}: 사회복지기금 ${won(FUND_PAY)} 납부`);
+    pay(me, FUND_PAY, 'fund');
+  } else if (t.t === 'fundOut') {
+    if (S.fund > 0) { log(`💰 ${p.name}: 사회복지기금 ${won(S.fund)} 수령!`); p.money += S.fund; S.fund = 0; }
+    else log('사회복지기금이 비어 있습니다.');
+  } else if (t.t === 'space') {
+    SFX.play('space');
+    p.space = true; S.extra = false;
+    log(`🚀 ${p.name}: 우주정거장 도착! 다음 턴에 원하는 칸으로 날아갑니다.`);
+  }
+  render();
+}
+
+async function drawKey(p) {
+  if (S.deckPos >= S.deck.length) { S.deck = shuffle(KEYS.map((_, i) => i)); S.deckPos = 0; }
+  const k = KEYS[S.deck[S.deckPos++]];
+  log(`🔑 ${p.name} 황금열쇠 — ${k.n}: ${k.d}`);
+  S.card = { seq: (S.card ? S.card.seq : 0) + 1, n: k.n, d: k.d };
+  sync();
+  await showCard(k.n, k.d, p.ai);
+  await k.f(p);
+}
+
+function showCard(title, desc, auto, ms = 2600) {
+  $('cardTitle').textContent = title;
+  $('cardDesc').textContent = desc;
+  $('cardOv').classList.add('show');
+  const kc = $('keycard');
+  kc.classList.remove('flip'); void kc.offsetWidth; kc.classList.add('flip');
+  SFX.play('card');
+  return new Promise(res => {
+    let done = false;
+    const close = () => { if (done) return; done = true; $('cardOv').classList.remove('show'); $('keycard').onclick = null; res(); };
+    $('keycard').onclick = close;
+    if (auto || SPEED < 0.2) setTimeout(close, ms * SPEED * TEMPO);
+  });
+}
+
+/* ================= 턴 진행 ================= */
+async function actRoll() {
+  if (busy || !S || S.phase !== 'roll' || !myTurn()) return;
+  busy = true; infoTile = -1;
+  try {
+    const p = cur();
+    if (p.island > 0 && p.escape > 0) { p.escape--; p.island = 0; log(`🎫 ${p.name}: 무인도 탈출권 사용!`); }
+    const d = [rnd6(), rnd6()];
+    await rollAnim(d);
+    S.rollSeq = (S.rollSeq || 0) + 1;
+    sync();
+    const sum = d[0] + d[1], dbl = d[0] === d[1];
+    log(`🎲 ${p.name}: ${d[0]} + ${d[1]} = ${sum}${dbl ? ' (더블!)' : ''}`);
+
+    if (p.island > 0) {
+      S.extra = false;
+      if (dbl) {
+        p.island = 0;
+        log(`🎉 ${p.name}: 더블로 무인도 탈출!`);
+        await stepMove(p, sum); await land(p);
+      } else {
+        p.island--;
+        log(p.island > 0 ? `🌴 ${p.name}: 탈출 실패 (남은 ${p.island}턴)` : `🌴 ${p.name}: 다음 턴에 무인도를 떠납니다.`);
+      }
+    } else {
+      if (dbl) {
+        S.dbl++;
+        if (S.dbl >= 3) { log('🚨 더블 3번! 과속으로 무인도행'); sendIsland(p); finish(); return; }
+        S.extra = true;
+      } else { S.dbl = 0; S.extra = false; }
+      await stepMove(p, sum); await land(p);
+    }
+    finish();
+  } finally { busy = false; render(); sync(); }
+}
+
+async function actSpace(i) {
+  if (busy || !S || S.phase !== 'space' || i === SPACE || !myTurn()) return;
+  busy = true; infoTile = -1;
+  try {
+    const p = cur(), o = S.owner[COLUMBIA];
+    p.space = false; S.extra = false;
+    if (o >= 0 && o !== S.cur) {
+      log(`🛰️ ${p.name}: 컬럼비아호 탑승료 ${won(SPACE_FEE)} → ${S.players[o].name}`);
+      pay(S.cur, SPACE_FEE, o);
+    }
+    if (p.alive) {
+      log(`🚀 ${p.name}: ${T[i].n}(으)로 우주여행!`);
+      await moveTo(p, i, true); await land(p);
+    }
+    finish();
+  } finally { busy = false; render(); sync(); }
+}
+
+function actConfirm() {
+  if (busy || !S || S.phase !== 'action' || !S.pending || !myTurn()) return;
+  const { type, tile } = S.pending, p = cur(), t = T[tile];
+  S.pending = null;
+  if (type === 'buy' && p.money >= t.p && S.owner[tile] < 0) {
+    p.money -= t.p; S.owner[tile] = S.cur; SFX.play('buy');
+    log(`🏷️ ${p.name}: ${t.n} 구입 (${won(t.p)})`);
+    if (canBuild(tile)) S.pending = { type: 'build', tile };   // 땅 사면서 바로 건물 한 채 가능
+  } else if (type === 'build' && canBuild(tile)) {
+    const c = buildCost(tile);
+    p.money -= c; S.level[tile]++; SFX.play('build');
+    log(`${BLD_ICON[S.level[tile]]} ${p.name}: ${t.n}에 ${BLD_NAME[S.level[tile]]} 건설 (${won(c)})`);
+  }
+  finish(); render(); sync();
+}
+
+function actSkip() {
+  if (busy || !S || S.phase !== 'action' || !myTurn()) return;
+  S.pending = null;
+  finish(); render(); sync();
+}
+
+/** 이 브라우저가 지금 차례를 진행해야 하는가 (온라인이면 내 자리 / 방장은 컴퓨터 자리까지) */
+function myTurn() {
+  if (!S) return false;
+  if (!NET) return true;
+  const p = cur();
+  return p.ai ? NET.host === CID : p.cid === CID;
+}
+function sync() { if (NET && S) pushState(); }
+
+function aliveCount() { return S.players.filter(p => p.alive).length; }
+
+/** 현재 행동이 끝난 뒤 다음 단계 결정 */
+function finish() {
+  if (S.phase === 'over') return;
+  if (aliveCount() <= 1) return endGame();
+  const p = cur();
+  if (S.pending && p.alive) { S.phase = 'action'; return; }
+  S.pending = null;
+  if (S.extra && p.alive && p.island === 0 && !p.space) {
+    S.extra = false; S.phase = 'roll';
+    log(`🔁 ${p.name}: 더블! 한 번 더 굴립니다.`);
+    return;
+  }
+  nextTurn();
+}
+
+function nextTurn() {
+  S.dbl = 0; S.extra = false; S.pending = null;
+  let n = S.cur;
+  do {
+    n = (n + 1) % S.players.length;
+    if (n === 0) S.round++;
+  } while (!S.players[n].alive);
+  S.cur = n;
+  if (S.maxRound && S.round > S.maxRound) { S.round = S.maxRound; return endGame('라운드 제한 도달'); }
+  S.phase = cur().space ? 'space' : 'roll';
+  autosave();
+}
+
+function endGame(reason) {
+  S.phase = 'over';
+  const ranking = S.players.map((p, i) => ({ i, a: assets(i), alive: p.alive }))
+    .sort((a, b) => (b.alive - a.alive) || (b.a - a.a));
+  S.result = { reason: reason || '나머지 플레이어 모두 파산', ranking };
+  log(`🏆 게임 종료 — ${S.players[ranking[0].i].name} 승리!`);
+  SFX.play('win');
+  autosave();
+  render();
+}
+
+/* ================= 컴퓨터 플레이어 ================= */
+let aiTimer = null;
+function scheduleAI() {
+  if (aiTimer || !S || busy || S.phase === 'over' || !cur().ai || !myTurn()) return;
+  aiTimer = setTimeout(() => { aiTimer = null; aiStep(); }, 1300 * SPEED * TEMPO);
+}
+function aiStep() {
+  if (!S || busy || S.phase === 'over') return;
+  const p = cur();
+  if (!p.ai || !myTurn()) return;
+  if (S.phase === 'roll') actRoll();
+  else if (S.phase === 'space') actSpace(aiSpaceTarget(p));
+  else if (S.phase === 'action') {
+    const { type, tile } = S.pending;
+    const cost = type === 'buy' ? T[tile].p : buildCost(tile);
+    const reserve = type === 'buy' ? 250000 : 450000;
+    if (p.money - cost >= reserve) actConfirm(); else actSkip();
+  }
+}
+function aiSpaceTarget(p) {
+  const budget = p.money - 250000;
+  let best = -1;
+  T.forEach((t, i) => {
+    if (i === SPACE || !isProp(i) || S.owner[i] >= 0 || t.p > budget) return;
+    if (best < 0 || t.p > T[best].p) best = i;
+  });
+  if (best >= 0) return best;
+  const mine = T.map((_, i) => i).filter(i => S.owner[i] === S.cur && T[i].t === 'city' && S.level[i] < 3);
+  return mine.length ? mine[Math.floor(Math.random() * mine.length)] : 0;
+}
+
+/* ================= 저장 ================= */
+const HAS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
+function gas(fn, ...args) {
+  return new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn](...args));
+}
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* 무시 */ } }
+function genCode() { const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 6; i++) s += c[Math.floor(Math.random() * c.length)]; return s; }
+const Store = {
+  async save(code, json) {
+    if (HAS_GAS) return gas('saveGame', code, json);
+    code = code || genCode(); lsSet('bm_save_' + code, json); return code;
+  },
+  async load(code) {
+    if (HAS_GAS) return gas('loadGame', code);
+    return lsGet('bm_save_' + code);
+  },
+};
+let saveChain = Promise.resolve();
+function autosave() {
+  if (!S) return;
+  if (NET) { pushState(); return saveChain; }
+  saveChain = saveChain.then(async () => {
+    const data = JSON.stringify(Object.assign({}, S, { log: S.log.slice(-12) }));
+    try {
+      $('saveInfo').textContent = '저장 중…';
+      const code = await Store.save(S.code, data);
+      S.code = code; lsSet('bm_code', code);
+      $('saveInfo').innerHTML = `저장 코드 <span class="code">${code}</span>`;
+    } catch (e) {
+      $('saveInfo').textContent = '저장 실패: ' + (e && e.message || e);
+    }
+  });
+  return saveChain;
+}
+async function loadByCode(code) {
+  code = String(code || '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(code)) { $('setupMsg').textContent = '코드는 영문/숫자 6자리입니다.'; return; }
+  $('setupMsg').textContent = '불러오는 중…';
+  try {
+    const json = await Store.load(code);
+    if (!json) { $('setupMsg').textContent = '해당 코드의 저장 데이터가 없습니다.'; return; }
+    const st = JSON.parse(json);
+    if (!st.players || !st.owner) throw new Error('잘못된 데이터');
+    S = st; S.code = code; busy = false; infoTile = -1; resetView();
+    lsSet('bm_code', code);
+    if (S.phase === 'action' && !S.pending) finish();
+    log('📂 저장된 게임을 불러왔습니다.');
+    $('setup').classList.remove('show');
+    $('saveInfo').innerHTML = `저장 코드 <span class="code">${code}</span>`;
+    render();
+  } catch (e) {
+    $('setupMsg').textContent = '불러오기 실패: ' + (e && e.message || e);
+  }
+}
+
+/* ================= 화면 ================= */
+const PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+// 각 눈이 앞면으로 오게 하는 회전값 [X, Y]
+const FACE_ROT = { 1: [0, 0], 6: [0, 180], 2: [0, -90], 5: [0, 90], 3: [-90, 0], 4: [90, 0] };
+function buildDie(el) {
+  el.innerHTML = '<div class="cube">' + [1, 2, 3, 4, 5, 6].map(v =>
+    `<div class="face f${v}">` + Array.from({ length: 9 }, (_, k) => `<i class="${PIPS[v].includes(k) ? 'on' : ''}"></i>`).join('') + '</div>').join('') + '</div>';
+  el.rx = 0; el.ry = 0; el.v = 1;
+  el.firstChild.style.transform = 'rotateX(-12deg) rotateY(14deg)';
+}
+/** 주사위를 v가 보이게 돌린다. spin이면 여러 바퀴 굴러가며 */
+function setDie(el, v, spin) {
+  const cube = el.firstChild, [tx, ty] = FACE_ROT[v];
+  if (spin) {
+    el.rx = Math.ceil(el.rx / 360) * 360 + 360 * (2 + Math.floor(Math.random() * 2)) + tx;
+    el.ry = Math.ceil(el.ry / 360) * 360 + 360 * (1 + Math.floor(Math.random() * 2)) + ty;
+  } else {
+    if (el.v === v) return;
+    el.rx = Math.round(el.rx / 360) * 360 + tx;
+    el.ry = Math.round(el.ry / 360) * 360 + ty;
+  }
+  el.v = v;
+  cube.style.transitionDuration = spin ? (1.25 * SPEED * TEMPO) + 's' : '0s';
+  // 살짝 기울여서 입체감
+  cube.style.transform = `rotateX(${el.rx - 12}deg) rotateY(${el.ry + 14}deg)`;
+}
+async function rollAnim(d) {
+  const a = $('d1'), b = $('d2'), sum = $('diceSum');
+  S.dice = d;
+  [a, b].forEach(el => { el.classList.remove('toss'); void el.offsetWidth; el.style.animationDuration = (1.25 * SPEED * TEMPO) + 's'; el.classList.add('toss'); });
+  setDie(a, d[0], true); setDie(b, d[1], true);
+  SFX.play('roll');
+  await sleep(1300);
+  a.classList.remove('toss'); b.classList.remove('toss');
+  sum.textContent = d[0] === d[1] ? `${d[0] + d[1]} 더블!` : `${d[0] + d[1]}!`;
+  sum.classList.remove('show'); void sum.offsetWidth; sum.classList.add('show');
+  if (d[0] === d[1]) SFX.play('double');
+  await sleep(450);
+}
+
+function tileGrid(i) {           // [row, col] (1-based), 출발은 오른쪽 아래
+  if (i <= 10) return [11, 11 - i];
+  if (i <= 20) return [11 - (i - 10), 1];
+  if (i <= 30) return [1, 1 + (i - 20)];
+  return [1 + (i - 30), 11];
+}
+
+const tileEls = [];
+function buildBoard() {
+  const board = $('board');
+  T.forEach((t, i) => {
+    const el = document.createElement('div');
+    const [r, c] = tileGrid(i);
+    el.className = 'tile' + (i % 10 === 0 ? ' corner' : '');
+    el.style.gridRow = r; el.style.gridColumn = c;
+    const band = t.t === 'city' ? GROUP_COLORS[t.g] : t.t === 'special' ? '#d4a017' : 'transparent';
+    el.innerHTML = `<div class="band" style="background:${band}"></div>` +
+      (t.e ? `<div class="emo">${t.e}</div>` : '') +
+      `<div class="name">${t.n}</div><div class="price"></div><div class="bld"></div>`;
+    el.addEventListener('click', () => onTileClick(i));
+    board.appendChild(el);
+    tileEls.push(el);
+  });
+}
+
+function onTileClick(i) {
+  if (!S) return;
+  if (S.phase === 'space' && !busy && !cur().ai && myTurn() && i !== SPACE) { actSpace(i); return; }
+  infoTile = infoTile === i ? -1 : i;
+  render();
+}
+
+function tileInfoHTML(i) {
+  const t = T[i];
+  if (!isProp(i)) {
+    const desc = {
+      start: `지나갈 때마다 월급 ${won(SALARY)}을 받습니다.`,
+      key: '황금열쇠 카드를 한 장 뽑습니다.',
+      island: `${ISLAND_TURNS}턴 동안 갇힙니다. 더블이 나오면 탈출!`,
+      fundIn: `사회복지기금 ${won(FUND_PAY)}을 냅니다.`,
+      fundOut: `모인 사회복지기금(${won(S.fund)})을 모두 받습니다.`,
+      space: `다음 턴에 원하는 칸으로 이동합니다. 컬럼비아호 주인에게 ${won(SPACE_FEE)} 탑승료.`,
+    }[t.t];
+    return `<b>${t.e || ''} ${t.n}</b><br>${desc}`;
+  }
+  const o = S.owner[i];
+  let h = `<b>${t.e || ''} ${t.n}</b> · 땅값 ${won(t.p)}<br>소유: ${o >= 0 ? S.players[o].name : '없음'}`;
+  if (t.t === 'special') {
+    h += `<br>통행료 ${won(rent(i))} (건물 불가)`;
+  } else {
+    h += `<table>` + [0, 1, 2, 3].map(l =>
+      `<tr${S.level[i] === l && o >= 0 ? ' style="font-weight:800"' : ''}><td>${BLD_ICON[l] || '🟫'} ${BLD_NAME[l]}</td><td>${won(rent(i, l))}</td></tr>`).join('') +
+      `</table><span class="hint">건설비 한 단계 ${won(buildCost(i))} · 같은 색 독점 시 땅 통행료 2배</span>`;
+  }
+  return h;
+}
+
+function render() {
+  if (!S) return;
+  const pickSpace = S.phase === 'space' && !busy && !cur().ai && myTurn();
+  T.forEach((t, i) => {
+    const el = tileEls[i], o = S.owner[i];
+    el.classList.toggle('owned', o >= 0);
+    el.style.setProperty('--own', o >= 0 ? S.players[o].color : 'transparent');
+    el.classList.toggle('selectable', pickSpace && i !== SPACE);
+    el.classList.toggle('info-on', infoTile === i);
+    el.querySelector('.price').textContent = isProp(i) ? (o >= 0 ? '💵' + man(rent(i)) : man(t.p)) : '';
+    const bld = el.querySelector('.bld');
+    if (bld.textContent !== BLD_ICON[S.level[i]]) {
+      bld.textContent = BLD_ICON[S.level[i]];
+      if (S.level[i] > 0) { bld.classList.remove('pop'); void bld.offsetWidth; bld.classList.add('pop'); }
+    }
+  });
+  renderPieces();
+
+  // 가운데 패널
+  const p = cur();
+  const turnKey = S.phase === 'over' ? 'over' : S.cur + '/' + S.round;
+  if (turnKey !== lastTurnKey) {
+    const ti = $('turnInfo');
+    ti.innerHTML = S.phase === 'over' ? '🏁 게임 종료'
+      : `<span class="avatar" style="display:inline-grid;vertical-align:middle;background:${p.color}">${esc(avatarOf(p, S.cur))}</span> ${esc(p.name)}${p.ai ? ' 🤖' : ''} 차례`;
+    ti.classList.remove('pop'); void ti.offsetWidth; ti.classList.add('pop');
+    if (lastTurnKey && S.phase !== 'over' && myTurn() && !p.ai) SFX.play('turn');
+    lastTurnKey = turnKey;
+  }
+  if (!busy) { setDie($('d1'), S.dice[0]); setDie($('d2'), S.dice[1]); }
+  let msg = '', btns = [];
+  if (S.phase === 'over') {
+    msg = `🏆 ${S.players[S.result.ranking[0].i].name} 승리!`;
+    btns.push(['결과 보기', 'gold', () => $('overOv').classList.add('show')]);
+  } else if (busy) {
+    msg = '…';
+  } else if (p.ai) {
+    msg = '🤖 컴퓨터가 생각 중…';
+  } else if (!myTurn()) {
+    msg = `⏳ ${esc(p.name)}님의 차례를 기다리는 중…`;
+    if (NET && NET.host === CID && Date.now() - NET.changedAt > 40000 * Math.max(SPEED, 0.1)) {
+      btns.push(['🤖 컴퓨터가 대신하기', 'alt', takeOver]);
+    }
+  } else if (S.phase === 'roll') {
+    if (p.island > 0) {
+      msg = `🌴 무인도에 갇혀 있습니다 (남은 ${p.island}턴). 더블이 나오면 탈출!`;
+      btns.push([p.escape > 0 ? '🎫 탈출권 쓰고 굴리기' : '🎲 탈출 시도', 'gold', actRoll]);
+    } else {
+      msg = S.dbl > 0 ? '더블! 한 번 더 굴리세요.' : '주사위를 굴리세요.';
+      btns.push(['🎲 주사위 굴리기', 'gold', actRoll]);
+    }
+  } else if (S.phase === 'space') {
+    const o = S.owner[COLUMBIA];
+    msg = '🚀 보드에서 이동할 칸을 누르세요.' + (o >= 0 && o !== S.cur ? ` (탑승료 ${won(SPACE_FEE)} → ${esc(S.players[o].name)})` : '');
+  } else if (S.phase === 'action' && S.pending) {
+    const { type, tile } = S.pending, t = T[tile];
+    if (type === 'buy') {
+      msg = `${t.e || ''} <b>${t.n}</b>을(를) <b>${won(t.p)}</b>에 살까요?<br><span class="hint">통행료 ${won(rent(tile))}${t.t === 'special' ? ' (건물 불가)' : ''}</span>`;
+      btns.push(['🏷️ 구입', 'gold', actConfirm], ['패스', 'alt', actSkip]);
+    } else {
+      const nl = S.level[tile] + 1;
+      msg = `<b>${t.n}</b>에 ${BLD_ICON[nl]} <b>${BLD_NAME[nl]}</b>을(를) <b>${won(buildCost(tile))}</b>에 지을까요?<br>` +
+        `<span class="hint">통행료 ${won(rent(tile))} → ${won(rent(tile, nl))}</span>`;
+      btns.push(['🔨 건설', 'gold', actConfirm], ['패스', 'alt', actSkip]);
+    }
+  }
+  const act = $('actions');
+  const actKey = msg + '|' + btns.map(b => b[0]).join();
+  if (actKey !== act.dataset.key) {
+    act.dataset.key = actKey;
+    $('msg').innerHTML = msg;
+    act.innerHTML = '';
+    btns.forEach(([label, cls, fn]) => {
+      const b = document.createElement('button');
+      b.textContent = label; b.className = cls; b.onclick = fn;
+      act.appendChild(b);
+    });
+    if (btns.length) [$('msg'), act].forEach(el => { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); });
+  }
+  $('tileInfo').innerHTML = infoTile >= 0 ? tileInfoHTML(infoTile) : '';
+
+  // 사이드 패널
+  $('players').innerHTML = S.players.map((q, qi) => {
+    const lands = S.owner.filter(o => o === qi).length;
+    const tags = [q.island > 0 ? `🌴${q.island}` : '', q.space ? '🚀' : '', q.pass ? `🎫우대권×${q.pass}` : '', q.escape ? `🎫탈출권×${q.escape}` : ''].filter(Boolean).join(' ');
+    return `<div class="pl${qi === S.cur && S.phase !== 'over' ? ' cur' : ''}${q.alive ? '' : ' dead'}">
+      <span class="avatar" style="background:${q.color}">${esc(avatarOf(q, qi))}</span>
+      <div class="info"><div class="nm">${esc(q.name)}${q.ai ? ' 🤖' : ''}${NET && q.cid === CID ? '<span class="me">나</span>' : ''}</div>
+      <div class="sub">땅 ${lands}개 · 총자산 ${man(assets(qi))} ${tags}</div></div>
+      <div class="money" data-i="${qi}">${man(q.money)}</div></div>`;
+  }).join('');
+  moneyEffects();
+  $('fund').textContent = won(S.fund);
+  $('round').textContent = S.maxRound ? `${S.round} / ${S.maxRound}` : S.round;
+  $('btnSave').disabled = busy;
+  $('btnSave').hidden = !!NET;
+
+  if (S.phase === 'over') renderOver();
+  scheduleAI();
+}
+
+let lastTurnKey = '', lastMoney = null, pieceEls = [], lastPos = [];
+function resetView() { lastTurnKey = ''; lastMoney = null; lastPos = []; }
+/** 보드 위 장기말 배치 (같은 칸에 여럿이면 살짝씩 비켜 선다) */
+function renderPieces() {
+  const layer = $('pieces');
+  if (pieceEls.length !== S.players.length || pieceEls.some((el, i) => el.dataset.av !== avatarOf(S.players[i], i) || el.dataset.nm !== S.players[i].name)) {
+    layer.innerHTML = '';
+    pieceEls = S.players.map((p, i) => {
+      const el = document.createElement('div');
+      el.className = 'piece';
+      el.dataset.av = avatarOf(p, i); el.dataset.nm = p.name;
+      el.style.setProperty('--c', p.color);
+      el.innerHTML = `<div class="tag">${esc(p.name)}</div><div class="body">${esc(avatarOf(p, i))}</div>`;
+      layer.appendChild(el);
+      return el;
+    });
+    lastPos = [];
+  }
+  const OFF = [[-.22, -.12], [.22, -.12], [-.22, .22], [.22, .22]];
+  S.players.forEach((p, i) => {
+    const el = pieceEls[i];
+    el.hidden = !p.alive;
+    if (!p.alive) return;
+    const same = S.players.filter(q => q.alive && q.pos === p.pos);
+    const k = same.indexOf(p), tile = tileEls[p.pos];
+    const [ox, oy] = same.length > 1 ? OFF[k % 4] : [0, .12];
+    el.style.left = (tile.offsetLeft + tile.offsetWidth * (.5 + ox)) + 'px';
+    el.style.top = (tile.offsetTop + tile.offsetHeight * (.55 + oy)) + 'px';
+    el.classList.toggle('active', i === S.cur && S.phase !== 'over');
+    if (lastPos[i] !== undefined && lastPos[i] !== p.pos) {
+      const dist = Math.min((p.pos - lastPos[i] + 40) % 40, (lastPos[i] - p.pos + 40) % 40);
+      el.classList.remove('hop', 'fly'); void el.offsetWidth;
+      el.classList.add(dist > 2 ? 'fly' : 'hop');
+      el.style.transitionDuration = dist > 2 ? (0.7 * SPEED * TEMPO) + 's' : (0.25 * SPEED * TEMPO) + 's';
+    }
+    lastPos[i] = p.pos;
+  });
+}
+window.addEventListener('resize', () => { if (S) renderPieces(); });
+
+/** 돈이 바뀐 만큼 장기말 위에 +/− 숫자 띄우기 */
+function moneyEffects() {
+  const now = S.players.map(p => p.money);
+  if (lastMoney && lastMoney.length === now.length) {
+    now.forEach((m, i) => {
+      const d = m - lastMoney[i];
+      if (!d) return;
+      const pe = pieceEls[i];
+      if (pe && !pe.hidden) {
+        const f = document.createElement('div');
+        f.className = 'float ' + (d > 0 ? 'plus' : 'minus');
+        f.textContent = (d > 0 ? '+' : '−') + man(Math.abs(d));
+        f.style.left = pe.style.left; f.style.top = pe.style.top;
+        $('pieces').appendChild(f);
+        setTimeout(() => f.remove(), 1900);
+      }
+      const me = document.querySelector(`.pl .money[data-i="${i}"]`);
+      if (me) me.classList.add(d > 0 ? 'up' : 'down');
+      if (d > 0) SFX.play('coin'); else SFX.play('pay');
+    });
+  }
+  lastMoney = now;
+}
+
+function renderLog() {
+  if (!S) return;
+  $('log').innerHTML = S.log.slice().reverse().map(l => `<div>${esc(l)}</div>`).join('');
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+let overShown = false;
+function renderOver() {
+  const r = S.result;
+  $('overTitle').textContent = `🏆 ${S.players[r.ranking[0].i].name} 승리!`;
+  $('overBody').innerHTML = `<p class="hint">${r.reason}</p>` + r.ranking.map((x, k) =>
+    `<div class="rank"><span>${['🥇', '🥈', '🥉', '4위'][k]} ${esc(S.players[x.i].name)}${x.alive ? '' : ' (파산)'}</span><b>${won(x.a)}</b></div>`).join('');
+  if (!overShown) { overShown = true; $('overOv').classList.add('show'); }
+}
+
+/* ================= 온라인 ================= */
+// NET: { code, v, host, lobby, url, changedAt, lastJson, pushing } — 온라인 방에 있을 때만
+let NET = null;
+const CID = (() => {
+  let id = null;
+  try { id = sessionStorage.getItem('bm_cid'); } catch (e) { /* 무시 */ }
+  if (!id || !/^[a-z0-9]{8,32}$/.test(id)) {
+    id = Array.from({ length: 16 }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('');
+    try { sessionStorage.setItem('bm_cid', id); } catch (e) { /* 무시 */ }
+  }
+  return id;
+})();
+function ssGet(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
+function ssSet(k, v) { try { if (v == null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch (e) { /* 무시 */ } }
+
+let netChain = Promise.resolve(), pollTimer = null;
+function netMsg(t) { $('onlineMsg').textContent = t || ''; }
+function errText(e) { return (e && e.message) || String(e); }
+
+function enterRoom(reply) {
+  const r = JSON.parse(reply);
+  NET = { code: r.code, v: 0, host: null, lobby: [], url: r.url, changedAt: Date.now(), lastJson: null, pushing: 0 };
+  ssSet('bm_room', r.code);
+  const link = r.url ? r.url + '?room=' + r.code : '';
+  $('roomCode').textContent = r.code;
+  $('roomLink').value = link || '(배포 주소를 알 수 없어요 — 방 코드를 알려 주세요)';
+  $('onlineStart').hidden = true;
+  $('lobby').hidden = false;
+  netMsg('');
+  applyRoom(r.room);
+  startPolling();
+}
+
+async function netCreate() {
+  if (!HAS_GAS) return netMsg('온라인 플레이는 Apps Script로 배포한 웹앱 주소에서만 됩니다.');
+  const name = $('myName').value.trim();
+  if (!name) return netMsg('닉네임을 입력하세요.');
+  lsSet('bm_name', name); lsSet('bm_avatar', $('myAvatar').value);
+  netMsg('방을 만드는 중…');
+  try { enterRoom(await gas('createRoom', name, CID, $('myAvatar').value)); } catch (e) { netMsg('실패: ' + errText(e)); }
+}
+async function netJoin(code, quiet) {
+  if (!HAS_GAS) return netMsg('온라인 플레이는 Apps Script로 배포한 웹앱 주소에서만 됩니다.');
+  const name = $('myName').value.trim() || lsGet('bm_name') || '';
+  code = String(code || '').trim().toUpperCase();
+  if (!name) return netMsg('닉네임을 입력하세요.');
+  if (!/^[A-Z0-9]{5}$/.test(code)) return netMsg('방 코드는 5자리입니다.');
+  lsSet('bm_name', name); lsSet('bm_avatar', $('myAvatar').value);
+  netMsg(quiet ? '방에 다시 들어가는 중…' : '들어가는 중…');
+  try { enterRoom(await gas('joinRoom', code, name, CID, $('myAvatar').value)); }
+  catch (e) { ssSet('bm_room', null); netMsg('실패: ' + errText(e)); }
+}
+async function lobbyCall(fn, ...args) {
+  try { applyRoom(JSON.parse(await gas(fn, NET.code, CID, ...args)).room); }
+  catch (e) { netMsg(errText(e)); }
+}
+function leaveNet() {
+  if (!NET) return;
+  if (!NET.started) gas('leaveRoom', NET.code, CID).catch(() => {});
+  NET = null;
+  ssSet('bm_room', null);
+  clearTimeout(pollTimer);
+  $('onlineStart').hidden = false;
+  $('lobby').hidden = true;
+  $('saveInfo').textContent = '';
+}
+
+function renderLobby() {
+  const isHost = NET.host === CID;
+  $('lobbyList').innerHTML = '';
+  NET.lobby.forEach((seat, i) => {
+    const row = document.createElement('div');
+    row.className = 'lobby-seat';
+    row.innerHTML = `<span class="avatar" style="background:${P_COLORS[i]}">${esc(seat.avatar || AVATARS[i])}</span>
+      <span class="grow">${esc(seat.name)}${seat.ai ? ' 🤖' : ''}${seat.cid && seat.cid === NET.host ? ' 👑' : ''}${seat.cid === CID ? '<span class="me">나</span>' : ''}</span>`;
+    if (isHost && seat.cid !== NET.host) {
+      const b = document.createElement('button');
+      b.className = 'alt'; b.textContent = '빼기';
+      b.onclick = () => lobbyCall('removeSeat', i);
+      row.appendChild(b);
+    }
+    $('lobbyList').appendChild(row);
+  });
+  $('hostCtl').hidden = !isHost;
+  $('guestWait').hidden = isHost;
+  $('btnBot').disabled = NET.lobby.length >= 4;
+  $('btnNetStart').disabled = NET.lobby.length < 2;
+}
+
+/** 서버에서 받은 방 상태 반영 */
+async function applyRoom(room) {
+  if (!NET || room.v <= NET.v) return;
+  NET.v = room.v; NET.host = room.host; NET.lobby = room.lobby; NET.changedAt = Date.now();
+  if (!room.game) {
+    if (!room.lobby.some(seat => seat.cid === CID)) { leaveNet(); netMsg('방에서 나가게 되었습니다.'); return; }
+    renderLobby();
+    return;
+  }
+
+  const first = !NET.started;
+  NET.started = true;
+  NET.lastJson = null;
+  const old = S, ng = room.game;
+  if (first || !old || old.players.length !== ng.players.length) {
+    S = ng; overShown = false; resetView();
+    $('setup').classList.remove('show');
+    $('saveInfo').innerHTML = `온라인 방 <span class="code">${NET.code}</span>`;
+    render(); renderLog();
+    return;
+  }
+  // 다른 사람의 진행을 받아서 주사위 → 말 이동 → 황금열쇠 순서로 보여준다
+  busy = true;
+  try {
+    const from = old.players.map(p => p.pos), to = ng.players.map(p => p.pos);
+    const oldCard = old.card && old.card.seq;
+    S = ng;
+    renderLog();
+    if ((ng.rollSeq || 0) !== (old.rollSeq || 0)) await rollAnim(ng.dice);
+    ng.players.forEach((p, i) => { p.pos = from[i]; });
+    for (let i = 0; i < ng.players.length; i++) {
+      const p = ng.players[i], dist = (to[i] - from[i] + 40) % 40;
+      if (dist > 0 && dist <= 12) {
+        for (let k = 0; k < dist; k++) { p.pos = (p.pos + 1) % 40; SFX.play('step'); render(); await sleep(STEP_MS); }
+        flashTile(p.pos);
+      }
+      p.pos = to[i];
+    }
+    render();
+    if (ng.card && ng.card.seq !== oldCard && !myTurn()) showCard(ng.card.n, ng.card.d, true);
+  } finally {
+    busy = false;
+    render();
+  }
+}
+
+function startPolling() {
+  clearTimeout(pollTimer);
+  const tick = async () => {
+    if (!NET) return;
+    if (!busy && !NET.pushing) {
+      try {
+        const res = JSON.parse(await gas('getRoom', NET.code, NET.v));
+        if (!res.same && NET && !busy && !NET.pushing) await applyRoom(res);
+        if (S && S.phase !== 'over' && !myTurn()) render();  // 대기 시간 표시 갱신
+      } catch (e) {
+        if (NET && !NET.started) netMsg(errText(e));
+      }
+    }
+    if (NET) pollTimer = setTimeout(tick, 1500 * Math.max(SPEED, 0.1));
+  };
+  pollTimer = setTimeout(tick, 800);
+}
+
+/** 내 진행 상황을 서버에 올린다 (순서 보장, 같은 내용이면 생략) */
+function pushState() {
+  if (!NET) return;
+  const net = NET;
+  net.pushing++;
+  netChain = netChain.then(async () => {
+    if (!NET || !S) return;
+    const json = JSON.stringify(Object.assign({}, S, { log: S.log.slice(-20) }));
+    if (json === NET.lastJson) return;
+    try {
+      NET.v = await gas('putGame', NET.code, CID, NET.v, json);
+      NET.lastJson = json; NET.changedAt = Date.now();
+    } catch (e) {
+      if (errText(e).includes('CONFLICT')) {
+        log('⚠️ 다른 사람과 동시에 진행되어 서버 상태로 맞춥니다.');
+        const room = JSON.parse(await gas('getRoom', NET.code, -1));
+        NET.v = 0; S = null; NET.started = false;
+        await applyRoom(room);
+      } else {
+        $('saveInfo').textContent = '동기화 실패: ' + errText(e);
+      }
+    }
+  }).catch(e => { $('saveInfo').textContent = '동기화 실패: ' + errText(e); })
+    .finally(() => { net.pushing--; });
+}
+
+/** 방장: 자리를 비운 사람 대신 컴퓨터가 두게 한다 */
+function takeOver() {
+  if (!NET || NET.host !== CID || busy || myTurn()) return;
+  const p = cur();
+  p.ai = true;
+  log(`🤖 ${p.name}님이 자리를 비워 컴퓨터가 대신합니다. (같은 이름으로 다시 들어오면 돌아옵니다)`);
+  render(); pushState();
+}
+
+function netStart() {
+  if (!NET || NET.host !== CID) return;
+  const cfg = NET.lobby.map((seat, i) => ({ name: seat.name, ai: seat.ai, cid: seat.cid, avatar: seat.avatar || AVATARS[i] }));
+  newGame(cfg, +$('netRound').value);
+  S.code = null;
+  NET.started = true;
+  overShown = false; busy = false; infoTile = -1;
+  $('setup').classList.remove('show');
+  $('saveInfo').innerHTML = `온라인 방 <span class="code">${NET.code}</span>`;
+  render();
+  pushState();
+}
+
+function showTab(online) {
+  $('tabBtnLocal').classList.toggle('on', !online);
+  $('tabBtnOnline').classList.toggle('on', online);
+  $('tabLocal').hidden = online;
+  $('tabOnline').hidden = !online;
+}
+
+/* ================= 시작 화면 ================= */
+function renderSetupRows() {
+  const n = +$('pCount').value, rows = $('pRows');
+  const prev = [...rows.querySelectorAll('.setup-row')].map(r => ({ name: r.querySelector('input').value, ai: r.querySelector('select.who').value, av: r.querySelector('select.av').value }));
+  rows.innerHTML = '';
+  for (let i = 0; i < n; i++) {
+    const row = document.createElement('div');
+    row.className = 'setup-row';
+    row.innerHTML = `<select class="av" style="background:${P_COLORS[i]}">${avatarOptions()}</select>
+      <input maxlength="10" placeholder="닉네임" value="${esc(prev[i] ? prev[i].name : DEFAULT_NAMES[i])}">
+      <select class="who"><option value="0">사람</option><option value="1">컴퓨터</option></select>`;
+    row.querySelector('select.who').value = prev[i] ? prev[i].ai : (i === 0 ? '0' : '1');
+    row.querySelector('select.av').value = prev[i] ? prev[i].av : AVATARS[i];
+    rows.appendChild(row);
+  }
+}
+function avatarOptions() { return AVATARS.map(a => `<option value="${a}">${a}</option>`).join(''); }
+function openSetup() {
+  renderSetupRows();
+  const code = lsGet('bm_code');
+  $('resumeRow').innerHTML = '';
+  if (code) {
+    const b = document.createElement('button');
+    b.className = 'gold';
+    b.innerHTML = `▶ 이어하기 <span class="code">${code}</span>`;
+    b.onclick = () => loadByCode(code);
+    $('resumeRow').appendChild(b);
+  } else {
+    $('resumeRow').innerHTML = '<span class="hint">이 기기에 저장된 게임이 없습니다.</span>';
+  }
+  $('setupMsg').textContent = '';
+  $('setup').classList.add('show');
+}
+function startFromSetup() {
+  leaveNet();
+  const cfg = [...$('pRows').querySelectorAll('.setup-row')].map((r, i) => ({
+    name: r.querySelector('input').value.trim() || DEFAULT_NAMES[i],
+    ai: r.querySelector('select.who').value === '1',
+    avatar: r.querySelector('select.av').value,
+  }));
+  S = null;                // 새 게임은 새 저장 코드
+  newGame(cfg, +$('maxRound').value);
+  busy = false; overShown = false; infoTile = -1;
+  $('setup').classList.remove('show');
+  $('overOv').classList.remove('show');
+  $('saveInfo').textContent = '';
+  render();
+  autosave();
+}
+
+$('pCount').onchange = renderSetupRows;
+$('tabBtnLocal').onclick = () => showTab(false);
+$('tempo').onchange = () => { TEMPO = +$('tempo').value; lsSet('bm_tempo', $('tempo').value); };
+$('btnSound').onclick = () => { SFX.on = !SFX.on; lsSet('bm_sound', SFX.on ? '1' : '0'); $('btnSound').textContent = SFX.on ? '🔊 소리' : '🔇 소리'; };
+$('tabBtnOnline').onclick = () => showTab(true);
+$('btnCreate').onclick = netCreate;
+$('btnJoin').onclick = () => netJoin($('roomInput').value);
+$('btnBot').onclick = () => lobbyCall('addBot');
+$('btnNetStart').onclick = netStart;
+$('btnLeave').onclick = () => { leaveNet(); netMsg(''); };
+$('btnCopy').onclick = () => { $('roomLink').select(); try { navigator.clipboard.writeText($('roomLink').value); } catch (e) { document.execCommand('copy'); } };
+$('btnStart').onclick = startFromSetup;
+$('btnLoad').onclick = () => loadByCode($('codeInput').value);
+$('btnSave').onclick = () => { if (!busy) autosave(); };
+$('btnNew').onclick = () => {
+  if (busy) return;
+  if (NET && S && S.phase !== 'over' && !confirm('온라인 게임에서 나갈까요? (같은 이름으로 다시 들어올 수 있어요)')) return;
+  overShown = false; $('overOv').classList.remove('show'); leaveNet(); openSetup();
+};
+$('btnAgain').onclick = () => { $('overOv').classList.remove('show'); leaveNet(); openSetup(); };
+$('btnView').onclick = () => $('overOv').classList.remove('show');
+document.addEventListener('keydown', e => {
+  if (e.key === ' ' && S && S.phase === 'roll' && !cur().ai && myTurn() && !document.querySelector('.overlay.show')) { e.preventDefault(); actRoll(); }
+});
+
+buildBoard();
+buildDie($('d1')); buildDie($('d2'));
+$('myName').value = lsGet('bm_name') || '';
+$('myAvatar').innerHTML = avatarOptions();
+$('myAvatar').value = AVATARS.includes(lsGet('bm_avatar')) ? lsGet('bm_avatar') : AVATARS[0];
+TEMPO = +(lsGet('bm_tempo') || 1) || 1;
+$('tempo').value = String(TEMPO);
+SFX.on = lsGet('bm_sound') !== '0';
+$('btnSound').textContent = SFX.on ? '🔊 소리' : '🔇 소리';
+openSetup();
+// 새로고침했으면 같은 방으로 복귀, ?room=코드 링크로 들어왔으면 온라인 탭 열기
+if (ssGet('bm_room') && $('myName').value) { showTab(true); netJoin(ssGet('bm_room'), true); }
+else if (HAS_GAS && google.script.url) {
+  google.script.url.getLocation(loc => {
+    const room = loc && loc.parameter && loc.parameter.room;
+    if (room) { showTab(true); $('roomInput').value = String(room).toUpperCase(); netMsg('이름을 입력하고 참가하기를 누르세요.'); }
+  });
+}
+</script>
+</body>
+</html>
